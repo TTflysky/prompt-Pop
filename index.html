@@ -13,7 +13,7 @@
         <div class="brand-mark" aria-hidden="true">✦</div>
         <div>
           <div class="brand-name">PROMPT POP!</div>
-          <div class="brand-subtitle">提示词优化工坊</div>
+          <div class="brand-subtitle">提示词优化工坊 · v1.2.0</div>
         </div>
       </div>
       <div class="toolbar">
@@ -102,8 +102,8 @@
           </article>
           <article class="panel image-result-panel">
             <div class="panel-header blue-header"><div class="window-dots"><i></i><i></i><i></i></div><span>IMAGE PROMPT</span><span class="counter" id="imageCount">0 字</span></div>
-            <div class="image-result-body"><div class="image-output" id="imageOutput"><div class="image-output-placeholder">生成的图片会显示在这里</div></div><textarea id="imagePrompt" readonly></textarea></div>
-            <div class="panel-footer"><button class="soft-button" id="imageCopyButton">▣ <span>复制提示词</span></button><button class="action-button orange" id="analyzeThenGenerateButton">⌁ <span>先看图再生图</span></button><button class="action-button blue" id="generateImageButton">✦ <span>生成图片</span></button><button class="action-button green" id="useImagePromptButton">✣ <span>带入优化器</span></button></div>
+            <div class="image-result-body"><div class="image-output" id="imageOutput"><div class="image-output-placeholder">生成的图片会显示在这里</div></div><textarea id="imagePrompt" placeholder="输入生图提示词，或使用下方控件自动组合"></textarea></div>
+            <div class="panel-footer"><button class="soft-button" id="imageCopyButton">▣ <span>复制提示词</span></button><button class="action-button orange" id="optimizeImageButton">✦ <span>优化生图词</span></button><button class="action-button blue" id="generateImageButton">✦ <span>文生图</span></button><button class="action-button green" id="useImagePromptButton">✣ <span>带入通用优化</span></button></div>
           </article>
         </div>
       </section>
@@ -122,8 +122,8 @@
           </article>
           <article class="panel breakdown-result-panel">
             <div class="panel-header green-header"><div class="window-dots"><i></i><i></i><i></i></div><span>STYLE DNA</span><span class="counter" id="breakdownCount">0 字</span></div>
-            <div class="breakdown-result-body"><pre id="breakdownResult">上传图片后，详细的风格化提示词会显示在这里。</pre></div>
-            <div class="panel-footer"><button class="soft-button" id="copyBreakdownButton" type="button">▣ <span>复制拆解</span></button><button class="action-button green" id="useBreakdownButton" type="button">✣ <span>带入生图</span></button></div>
+            <div class="breakdown-result-body"><pre id="breakdownResult">上传图片后，详细的风格化提示词会显示在这里。</pre><textarea id="imageToImagePrompt" placeholder="拆解完成后可在这里修改图生图提示词"></textarea><div class="image-output compact-output" id="imageToImageOutput"><div class="image-output-placeholder">图生图结果会显示在这里</div></div></div>
+            <div class="panel-footer"><button class="soft-button" id="copyBreakdownButton" type="button">▣ <span>复制拆解</span></button><button class="action-button orange" id="sendToTextToImageButton" type="button">✦ <span>带入文生图</span></button><button class="action-button blue" id="generateImageToImageButton" type="button">⌁ <span>图生图</span></button></div>
           </article>
         </div>
       </section>
@@ -139,20 +139,23 @@
           <label for="textApiKey">API Key</label><input id="textApiKey" type="password" placeholder="sk-..." autocomplete="off" />
           <label for="textProvider">服务商</label><select id="textProvider" class="provider-select"><option value="openai">GPT / OpenAI</option><option value="deepseek">DeepSeek 深度求索</option><option value="qwen">通义千问</option><option value="doubao">豆包 / 火山引擎</option><option value="zhipu">智谱 GLM</option><option value="moonshot">月之暗面 Kimi</option><option value="siliconflow">硅基流动</option><option value="custom">自定义接口</option></select>
           <label for="textBaseUrl">接口地址 Base URL</label><input id="textBaseUrl" type="url" placeholder="https://api.openai.com/v1" autocomplete="url" />
-          <label for="textModel">文本优化模型</label><input id="textModel" type="text" placeholder="gpt-4o-mini / deepseek-chat" autocomplete="off" />
+          <label>文本优化模型</label><div class="model-row"><select id="textModel" class="model-select"><option value="">点击 ↻ 拉取模型</option></select><button class="model-picker-trigger" data-model-picker="text" data-model-display="text" type="button" title="选择已拉取的模型" aria-haspopup="dialog">点击选择模型</button><button class="fetch-models" data-model-target="text" type="button" title="拉取模型列表">↻</button></div>
         </section>
         <section class="config-pane" data-config-pane="vision">
           <label for="visionApiKey">API Key</label><input id="visionApiKey" type="password" placeholder="sk-..." autocomplete="off" />
           <label for="visionProvider">服务商</label><select id="visionProvider" class="provider-select"><option value="openai">GPT / OpenAI</option><option value="qwen">通义千问</option><option value="doubao">豆包 / 火山引擎</option><option value="zhipu">智谱 GLM</option><option value="custom">自定义接口</option></select>
           <label for="visionBaseUrl">接口地址 Base URL</label><input id="visionBaseUrl" type="url" placeholder="https://api.openai.com/v1" autocomplete="url" />
-          <label for="visionModel">视觉拆图模型</label><input id="visionModel" type="text" placeholder="gpt-4o / qwen-vl-max" autocomplete="off" />
+          <label>视觉拆图模型</label><div class="model-row"><select id="visionModel" class="model-select"><option value="">点击 ↻ 拉取模型</option></select><button class="model-picker-trigger" data-model-picker="vision" data-model-display="vision" type="button" title="选择已拉取的模型" aria-haspopup="dialog">点击选择模型</button><button class="fetch-models" data-model-target="vision" type="button" title="拉取模型列表">↻</button></div>
         </section>
         <section class="config-pane" data-config-pane="image">
           <label for="imageApiKey">API Key</label><input id="imageApiKey" type="password" placeholder="sk-..." autocomplete="off" />
           <label for="imageProvider">服务商</label><select id="imageProvider" class="provider-select"><option value="openai">GPT / OpenAI</option><option value="qwen">通义万相</option><option value="doubao">豆包 / 火山引擎</option><option value="custom">自定义接口</option></select>
           <label for="imageBaseUrl">接口地址 Base URL</label><input id="imageBaseUrl" type="url" placeholder="https://api.openai.com/v1" autocomplete="url" />
-          <label for="imageServiceModel">生图模型</label><input id="imageServiceModel" type="text" placeholder="gpt-image-2 / 自定义模型名" autocomplete="off" />
+          <label>生图模型</label><div class="model-row"><select id="imageServiceModel" class="model-select"><option value="">点击 ↻ 拉取模型</option></select><button class="model-picker-trigger" data-model-picker="image" data-model-display="image" type="button" title="选择已拉取的模型" aria-haspopup="dialog">点击选择模型</button><button class="fetch-models" data-model-target="image" type="button" title="拉取模型列表">↻</button></div>
         </section>
+        <div class="model-picker-sheet" id="modelPickerSheet" hidden>
+          <div class="model-picker-card"><div class="dialog-top"><span id="modelPickerTitle">选择模型</span><button class="close-button" id="closeModelPicker" type="button" aria-label="关闭">×</button></div><div class="model-picker-list" id="modelPickerList"></div></div>
+        </div>
         <p class="dialog-note">三套配置分别保存在本地。视觉模型负责看图，生图模型负责出图。</p>
         <button class="save-button" value="default">保存设置</button>
       </form>

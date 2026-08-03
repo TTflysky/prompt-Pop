@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.promptpop.app">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.promptpop.app" android:versionCode="12" android:versionName="1.2.0">
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:theme="@style/AppTheme" android:label="Prompt Pop!" android:icon="@mipmap/promptpop_launcher" android:roundIcon="@mipmap/promptpop_launcher" android:usesCleartextTraffic="true" android:resizeableActivity="true">
+    <application android:theme="@style/AppTheme" android:label="Prompt Pop v1.2.0" android:icon="@mipmap/promptpop_launcher" android:roundIcon="@mipmap/promptpop_launcher" android:usesCleartextTraffic="true" android:resizeableActivity="true">
         <activity android:name=".MainActivity" android:screenOrientation="unspecified" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
