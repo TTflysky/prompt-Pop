@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.6';
+const APP_VERSION = '1.2.7';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -263,7 +263,7 @@ async function generateImage() {
   try {
     let response;
     if (imageGenerateMode === 'image') {
-      const form = new FormData(); form.append('model', imageModel); form.append('prompt', imagePrompt.value); form.append('size', $('#imageSize').value); form.append('image', imageFile, imageFile.name);
+      const form = new FormData(); form.append('model', imageModel); form.append('prompt', buildI2IPrompt(imagePrompt.value, $('#imageStyle').value, $('#styleSlider').value, $('#negativePrompt').value)); form.append('size', $('#imageSize').value); form.append('image', imageFile, imageFile.name);
       response = await apiRequest(endpoint, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     } else {
       response = await apiRequest(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: imageModel, prompt: imagePrompt.value, size: $('#imageSize').value }) });
@@ -303,11 +303,11 @@ async function analyzeImage() {
   if (!breakdownImageData) { showToast('\u8bf7\u5148\u4e0a\u4f20\u4e00\u5f20\u56fe\u7247'); return; }
   const button = $('#analyzeImageButton'); button.disabled = true; button.innerHTML = '\u2026 <span>\u6df1\u5ea6\u5206\u6790\u4e2d</span>';
   const detail = $('#breakdownDetail').value; const language = $('#breakdownLanguage').value;
-  const instruction = `你是一位资深视觉分析师、摄影指导和提示词工程师。请对这张参考图进行${detail}的风格化拆解，输出语言为${language}。请不要识别或推断真实人物身份。请严格按以下结构输出：\n\n1. 一句话视觉总览\n2. 主体与叙事：主体、动作、表情、道具、环境、前景中景背景\n3. 风格流派：艺术流派、设计语言、参考媒介、时代气质\n4. 画面构成：景别、构图、视觉动线、主体位置、留白、层次\n5. 镜头语言：视角、焦段推测、景深、对焦、透视、拍摄距离\n6. 光线：主光、辅光、轮廓光、光质、方向、阴影、氛围\n7. 色彩：主色、辅色、点缀色、冷暖关系、饱和度、对比度\n8. 材质与纹理：表面质感、颗粒、网点、笔触、纸张、反射、磨损\n9. 后期与画质：清晰度、锐度、动态范围、色彩分级、印刷或渲染特征\n10. 可复用的风格关键词\n11. 反向提示词\n12. FINAL IMAGE PROMPT：输出一段可以直接用于文生图或图生图的完整英文提示词，尽可能具体，包含主体、环境、构图、镜头、光线、色彩、材质和质量词。`;
+  const instruction = `你是一位资深视觉风格分析师和提示词工程师。请对这张参考图进行${detail}的“纯风格 DNA”拆解，输出语言为${language}。严格禁止描述、复述或猜测图中的任何主体、人物、物体、动作、文字、标识、地点、服饰、道具、具体场景或叙事内容；即使这些内容显眼也必须忽略。目标是让用户能把风格迁移到全新的主体上，而不是复刻原图。请严格按以下结构输出：\n\n1. 风格总览：艺术流派、时代气质、媒介感\n2. 构图语法：只描述抽象构图规律、留白、层次、视觉动线，不出现具体主体或位置描述\n3. 镜头与空间：景别、透视、焦段倾向、景深、距离感的通用规律\n4. 光线与氛围：方向、光质、反差、阴影、环境氛围\n5. 色彩系统：主辅色关系、冷暖、饱和度、对比度、分级方法\n6. 材质与纹理：颗粒、笔触、纸张、网点、反射、磨损等\n7. 后期与画质：锐度、动态范围、渲染或印刷特征\n8. 可复用风格关键词\n9. 反向提示词：避免复刻原图主体、文字、标识、原始场景\n10. FINAL STYLE PROMPT：输出一段只包含风格、构图语法、镜头、光线、色彩、材质和画质的英文提示词；绝不能包含或暗示原图主体、物体、人物、文字、地点和场景。`;
   try {
     const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: config.model, temperature: 0.25, max_tokens: 4000, messages: [{ role: 'system', content: instruction }, { role: 'user', content: [{ type: 'text', text: '\u8bf7\u5f00\u59cb\u5206\u6790\u8fd9\u5f20\u56fe\u7247\u3002' }, { type: 'image_url', image_url: { url: breakdownImageData } }] }] }) });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json(); lastBreakdown = data.choices?.[0]?.message?.content?.trim() || '\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u5206\u6790\u7ed3\u679c'; $('#breakdownResult').textContent = lastBreakdown; const finalPrompt = lastBreakdown.split('FINAL IMAGE PROMPT:').pop().trim(); $('#breakdownPrompt').value = finalPrompt || lastBreakdown; $('#breakdownCount').textContent = `${lastBreakdown.length} \u5b57`; showToast('\u56fe\u7247\u62c6\u89e3\u5b8c\u6210');
+    const data = await response.json(); lastBreakdown = data.choices?.[0]?.message?.content?.trim() || '\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u5206\u6790\u7ed3\u679c'; $('#breakdownResult').textContent = lastBreakdown; const finalPrompt = lastBreakdown.split(/FINAL STYLE PROMPT:/i).pop().trim(); $('#breakdownPrompt').value = finalPrompt || lastBreakdown; $('#breakdownCount').textContent = `${lastBreakdown.length} \u5b57`; showToast('\u98ce\u683c\u62c6\u89e3\u5b8c\u6210');
   } catch (error) { showToast(`\u5206\u6790\u5931\u8d25\uff1a${error.message}`); }
   finally { button.disabled = false; button.innerHTML = '\u2726 <span>\u5f00\u59cb\u62c6\u89e3\u56fe\u7247</span>'; }
 }
@@ -326,7 +326,7 @@ async function generateDirectI2I() {
   if (!config.apiKey || !config.baseUrl || !config.model) { settingsDialog.showModal(); showToast('\u8bf7\u5148\u914d\u7f6e\u751f\u56fe\u6a21\u578b'); return; }
   const button = $('#generateDirectI2IButton'); directI2IResultUrl = ''; $('#saveDirectI2IButton').disabled = true; button.disabled = true; button.innerHTML = '\u2026 <span>\u56fe\u751f\u56fe\u4e2d</span>';
   try {
-    const fullPrompt = [prompt, `Image-to-image direction: ${$('#directI2IStyle').value}. Reference variation strength: ${$('#directI2IStrength').value}%.`, $('#directI2INegative').value.trim() ? `Avoid: ${$('#directI2INegative').value.trim()}.` : ''].filter(Boolean).join('\n');
+    const fullPrompt = buildI2IPrompt(prompt, $('#directI2IStyle').value, $('#directI2IStrength').value, $('#directI2INegative').value);
     const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); form.append('size', $('#directI2ISize').value); form.append('image', directI2IFile, directI2IFile.name);
     const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/images/edits`, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     if (!response.ok) { const detail = await response.text(); throw new Error(`HTTP ${response.status} ${detail.slice(0, 180)}`); }
@@ -335,6 +335,7 @@ async function generateDirectI2I() {
   finally { button.disabled = false; button.innerHTML = '\u2301 <span>\u751f\u6210\u56fe\u751f\u56fe</span>'; }
 }
 $('#generateDirectI2IButton').addEventListener('click', generateDirectI2I);
+function buildI2IPrompt(prompt, style, strength, negative) { return [prompt, 'IMPORTANT: The user prompt has highest priority. Use the reference image only for general visual inspiration and style, not for its content.', 'Replace the original subject completely. Do not retain or recreate any original person, object, text, logo, sign, setting, composition, pose, identity, or recognizable detail from the reference.', `Target visual direction: ${style}. Transformation strength: ${strength}% (higher means more change from the reference).`, negative ? `Avoid: ${negative}.` : ''].filter(Boolean).join('\n'); }
 function makeImageFilename(kind) { return `prompt-pop-${kind}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`; }
 async function saveGeneratedImage(url, kind) {
   if (!url) return showToast('请先生成图片');

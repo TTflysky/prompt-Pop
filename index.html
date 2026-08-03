@@ -13,7 +13,7 @@
         <div class="brand-mark" aria-hidden="true">✦</div>
         <div>
           <div class="brand-name">PROMPT POP!</div>
-          <div class="brand-subtitle">提示词优化工坊 · v1.2.6</div>
+          <div class="brand-subtitle">提示词优化工坊 · v1.2.7</div>
         </div>
       </div>
       <div class="toolbar">
@@ -118,7 +118,7 @@
               <div class="image-preview-wrap wide" id="directI2IPreviewWrap" hidden><img id="directI2IPreview" alt="图生图参考图片预览" /><button class="remove-image" id="removeDirectI2IButton" type="button" aria-label="移除图片">×</button></div>
               <label class="control-field" for="directI2ISize">图片规格<select id="directI2ISize"><option value="1024x1024">1K 方图 · 1024 × 1024</option><option value="1536x1024">1K 横图 · 1536 × 1024</option><option value="1024x1536">1K 竖图 · 1024 × 1536</option><option value="2048x2048">2K 方图 · 2048 × 2048</option><option value="auto">自动匹配</option></select></label>
               <label class="control-field" for="directI2IStyle">风格方向<select id="directI2IStyle"><option value="preserve the original style of the reference image">保持原风格</option><option value="cinematic photorealistic">电影感写实</option><option value="American retro comic with halftone dots">美式复古漫画</option><option value="Japanese anime illustration">日系动漫</option><option value="editorial fashion photography">时尚摄影</option></select></label>
-              <div class="slider-field"><div><span>变化程度</span><strong id="directI2IStrengthValue">45%</strong></div><input id="directI2IStrength" type="range" min="0" max="100" value="45" step="1" /></div>
+              <div class="slider-field"><div><span>变化程度</span><strong id="directI2IStrengthValue">70%</strong></div><input id="directI2IStrength" type="range" min="0" max="100" value="70" step="1" /></div>
               <label class="control-field" for="directI2INegative">反向提示词<input id="directI2INegative" type="text" placeholder="如：模糊、水印、畸形" /></label>
             </div>
           </article>
@@ -179,7 +179,7 @@
         <div class="model-picker-sheet" id="modelPickerSheet" hidden>
           <div class="model-picker-card"><div class="dialog-top"><span id="modelPickerTitle">选择模型</span><button class="close-button" id="closeModelPicker" type="button" aria-label="关闭">×</button></div><div class="model-picker-list" id="modelPickerList"></div></div>
         </div>
-        <section class="update-panel" aria-label="版本更新"><div><strong>版本更新</strong><span id="updateStatus">当前版本 v1.2.6</span></div><div class="update-actions"><button class="soft-button" id="checkUpdateButton" type="button">检查更新</button><button class="action-button blue" id="applyUpdateButton" type="button" hidden>立即更新</button></div></section>
+        <section class="update-panel" aria-label="版本更新"><div><strong>版本更新</strong><span id="updateStatus">当前版本 v1.2.7</span></div><div class="update-actions"><button class="soft-button" id="checkUpdateButton" type="button">检查更新</button><button class="action-button blue" id="applyUpdateButton" type="button" hidden>立即更新</button></div></section>
         <p class="dialog-note">三套配置分别保存在本地。视觉模型负责看图，生图模型负责出图。</p>
         <button class="save-button" value="default">保存设置</button>
       </form>
