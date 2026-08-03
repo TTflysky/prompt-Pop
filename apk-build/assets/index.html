@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prompt Pop! 提示词优化工坊</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">✦</div>
+        <div>
+          <div class="brand-name">PROMPT POP!</div>
+          <div class="brand-subtitle">提示词优化工坊</div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="icon-button" id="historyButton" title="查看历史记录" aria-label="查看历史记录">◴</button>
+        <button class="icon-button" id="themeButton" title="切换明暗主题" aria-label="切换明暗主题">◔</button>
+        <button class="icon-button blue" id="settingsButton" title="打开设置" aria-label="打开设置">⚙</button>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="style-section">
+        <div class="section-heading">
+          <h1>CHOOSE YOUR STYLE</h1>
+          <div class="shortcut">按 <kbd>⌘ + ENTER</kbd> 快速优化</div>
+        </div>
+        <div class="mode-grid" id="modeGrid"></div>
+      </section>
+
+      <section class="workbench">
+        <article class="panel raw-panel">
+          <div class="panel-header red">
+            <div class="window-dots"><i></i><i></i><i></i></div>
+            <span>RAW IDEA</span>
+            <span class="counter" id="inputCount">0 字</span>
+          </div>
+          <div class="panel-body">
+            <textarea id="rawInput" placeholder="在这里输入你的想法或粗糙的提示词...&#10;&#10;例如：帮我写一个关于猫咪的文案"></textarea>
+          </div>
+          <div class="panel-footer">
+            <button class="soft-button" id="clearButton">⌫ <span>清空</span></button>
+            <button class="action-button green" id="optimizeButton">✣ <span>优化提示词</span></button>
+          </div>
+        </article>
+
+        <article class="panel result-panel">
+          <div class="panel-header green-header">
+            <div class="window-dots"><i></i><i></i><i></i></div>
+            <span>POLISHED PRO</span>
+            <span class="counter" id="outputCount">0 字</span>
+          </div>
+          <div class="panel-body result-body" id="resultBody">
+            <div class="empty-state">
+              <div class="spark-icon">✣</div>
+              <p>优化后的提示词将在这里闪亮登场！</p>
+              <small>请先在设置中配置 API Key</small>
+            </div>
+          </div>
+          <div class="panel-footer">
+            <button class="soft-button" id="copyButton">▣ <span>复制</span></button>
+            <button class="action-button sky" id="regenerateButton">⟳ <span>重新生成</span></button>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status"></div>
+
+    <dialog class="settings-dialog" id="settingsDialog">
+      <form method="dialog" id="settingsForm">
+        <div class="dialog-top"><span>API SETTINGS</span><button class="close-button" value="cancel" aria-label="关闭">×</button></div>
+        <label for="apiKey">API Key</label>
+        <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
+        <label for="provider">服务商</label>
+        <select id="provider">
+          <option value="openai">GPT / OpenAI</option>
+          <option value="deepseek">DeepSeek 深度求索</option>
+          <option value="qwen">通义千问</option>
+          <option value="doubao">豆包 / 火山引擎</option>
+          <option value="zhipu">智谱 GLM</option>
+          <option value="moonshot">月之暗面 Kimi</option>
+          <option value="siliconflow">硅基流动</option>
+          <option value="custom">自定义接口</option>
+        </select>
+        <label for="baseUrl">接口地址 Base URL</label>
+        <input id="baseUrl" type="url" placeholder="https://api.openai.com/v1" autocomplete="url" />
+        <label for="modelName">模型名称</label>
+        <input id="modelName" type="text" placeholder="gpt-4o-mini" autocomplete="off" />
+        <p class="dialog-note">Key 仅保存在当前浏览器本地，用于演示本地交互。</p>
+        <button class="save-button" value="default">保存设置</button>
+      </form>
+    </dialog>
+
+    <dialog class="history-dialog" id="historyDialog">
+      <div class="dialog-top"><span>RECENT POPS</span><button class="close-button" id="closeHistory" aria-label="关闭">×</button></div>
+      <div id="historyList" class="history-list"><p class="muted">还没有优化记录。</p></div>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>

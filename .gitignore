@@ -1,0 +1,15 @@
+# Build outputs and local signing material
+PromptPop.apk
+PromptPop.apk.idsig
+apk-build/*.keystore
+apk-build/classes/
+apk-build/dex/
+apk-build/gen/
+apk-build/resources.zip
+apk-build/unsigned.apk
+apk-build/aligned.apk
+
+# Local build copies
+apkbuild/
+icon-no-black-border.png
+remove_icon_border.ps1
