@@ -35,6 +35,10 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
+const APP_VERSION = '1.2.2';
+const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
+const updateRequests = new Map();
+let availableUpdate;
 let selectedMode = localStorage.getItem('prompt-pop-mode') || 'pro';
 let lastResult = '';
 let history = JSON.parse(localStorage.getItem('prompt-pop-history') || '[]');
@@ -64,6 +68,32 @@ window.__nativeApiResponse = (id, status, body, error) => {
   if (error) return request.reject(new Error(error));
   request.resolve({ ok: status >= 200 && status < 300, status, json: async () => JSON.parse(body || '{}'), text: async () => body || '' });
 };
+window.__nativeUpdateResponse = (id, status, body, error) => {
+  const request = updateRequests.get(id); if (!request) return; updateRequests.delete(id);
+  if (error) return request.reject(new Error(error));
+  if (status < 200 || status >= 300) return request.reject(new Error(`HTTP ${status}`));
+  try { request.resolve(JSON.parse(body || '{}')); } catch { request.reject(new Error('更新信息解析失败')); }
+};
+function compareVersions(left, right) { const a = String(left).split('.').map(Number); const b = String(right).split('.').map(Number); for (let i = 0; i < Math.max(a.length, b.length); i += 1) { const diff = (a[i] || 0) - (b[i] || 0); if (diff) return diff; } return 0; }
+function nativeUpdateRequest(method) { return new Promise((resolve, reject) => { const id = `update-${Date.now()}-${Math.random().toString(16).slice(2)}`; updateRequests.set(id, { resolve, reject }); window.PromptPopNative[method](id); }); }
+async function checkForUpdate() {
+  const status = $('#updateStatus'); const checkButton = $('#checkUpdateButton'); const applyButton = $('#applyUpdateButton');
+  checkButton.disabled = true; status.textContent = '正在检查 GitHub 更新...';
+  try {
+    const update = window.PromptPopNative?.checkForUpdate ? await nativeUpdateRequest('checkForUpdate') : await (await fetch(UPDATE_MANIFEST_URL, { cache: 'no-store' })).json();
+    if (!update.version) throw new Error('未找到版本号');
+    if (compareVersions(update.version, APP_VERSION) > 0) { availableUpdate = update; status.textContent = `发现 v${update.version}`; applyButton.hidden = false; applyButton.textContent = `更新至 v${update.version}`; }
+    else { availableUpdate = null; applyButton.hidden = true; status.textContent = `已是最新版本 v${APP_VERSION}`; }
+  } catch (error) { applyButton.hidden = true; status.textContent = '检查更新失败'; showToast(`更新检查失败：${error.message}`); }
+  finally { checkButton.disabled = false; }
+}
+async function applyHotUpdate() {
+  if (!availableUpdate) return checkForUpdate();
+  if (!window.PromptPopNative?.applyUpdate) return showToast('网页版不支持本地热更新');
+  const applyButton = $('#applyUpdateButton'); applyButton.disabled = true; $('#updateStatus').textContent = `正在更新至 v${availableUpdate.version}...`;
+  try { await nativeUpdateRequest('applyUpdate'); $('#updateStatus').textContent = '更新完成，正在重新加载...'; window.PromptPopNative.reloadUpdatedApp(); }
+  catch (error) { applyButton.disabled = false; showToast(`更新失败：${error.message}`); }
+}
 function readFileDataUrl(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('Unable to read selected image')); reader.readAsDataURL(file); }); }
 async function apiRequest(url, options = {}) {
   if (!window.PromptPopNative?.request) return fetch(url, options);
@@ -128,6 +158,8 @@ function applyProviderPreset(providerInput, baseUrlInput, modelInput) { const pr
 [[textProviderInput, textBaseUrlInput, textModelInput], [visionProviderInput, visionBaseUrlInput, visionModelInput], [imageProviderInput, imageBaseUrlInput, imageServiceModelInput]].forEach(([providerInput, baseUrlInput, modelInput]) => providerInput.addEventListener('change', () => applyProviderPreset(providerInput, baseUrlInput, modelInput)));
 document.querySelectorAll('.config-tab').forEach(tab => tab.addEventListener('click', () => { const name = tab.dataset.configTab; document.querySelectorAll('.config-tab').forEach(item => item.classList.toggle('active', item === tab)); document.querySelectorAll('.config-pane').forEach(pane => pane.classList.toggle('active', pane.dataset.configPane === name)); playSound('tab'); }));
 $('#settingsButton').addEventListener('click', () => { loadSettings(); settingsDialog.showModal(); });
+$('#checkUpdateButton').addEventListener('click', checkForUpdate);
+$('#applyUpdateButton').addEventListener('click', applyHotUpdate);
 $('#settingsForm').addEventListener('submit', event => { event.preventDefault(); const configs = { text: { provider: textProviderInput.value, apiKey: $('#textApiKey').value.trim(), baseUrl: textBaseUrlInput.value.trim(), model: textModelInput.value.trim() }, vision: { provider: visionProviderInput.value, apiKey: $('#visionApiKey').value.trim(), baseUrl: visionBaseUrlInput.value.trim(), model: visionModelInput.value.trim() }, image: { provider: imageProviderInput.value, apiKey: $('#imageApiKey').value.trim(), baseUrl: imageBaseUrlInput.value.trim(), model: imageServiceModelInput.value.trim() } }; localStorage.setItem('prompt-pop-settings', JSON.stringify(configs)); localStorage.setItem('prompt-pop-key', configs.text.apiKey); settingsDialog.close(); showToast('\u63a5\u53e3\u8bbe\u7f6e\u5df2\u4fdd\u5b58'); });
 function readConfigFromForm(target) {
   const fields = { text: [textProviderInput, $('#textApiKey'), textBaseUrlInput, textModelInput], vision: [visionProviderInput, $('#visionApiKey'), visionBaseUrlInput, visionModelInput], image: [imageProviderInput, $('#imageApiKey'), imageBaseUrlInput, imageServiceModelInput] }[target];
