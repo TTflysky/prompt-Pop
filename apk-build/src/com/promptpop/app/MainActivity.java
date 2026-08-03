@@ -42,6 +42,14 @@ public class MainActivity extends Activity {
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 return !isLocalAppUrl(url);
             }
+
+            @Override
+            public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
+                if (!failingUrl.startsWith("file:///android_asset/") && failingUrl.startsWith(Uri.fromFile(getUpdateRoot()).toString())) {
+                    getSharedPreferences("promptpop", MODE_PRIVATE).edit().putBoolean("use-hot-update", false).apply();
+                    webView.loadUrl("file:///android_asset/index.html");
+                }
+            }
         });
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -82,12 +90,12 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void checkForUpdate(final String requestId) {
-            new Thread(() -> checkForUpdate(requestId)).start();
+            new Thread(() -> MainActivity.this.checkForUpdate(requestId)).start();
         }
 
         @JavascriptInterface
         public void applyUpdate(final String requestId) {
-            new Thread(() -> applyUpdate(requestId)).start();
+            new Thread(() -> MainActivity.this.applyUpdate(requestId)).start();
         }
 
         @JavascriptInterface
@@ -110,7 +118,8 @@ public class MainActivity extends Activity {
 
     private void loadAppContent() {
         File updatedIndex = getUpdatedIndex();
-        webView.loadUrl(updatedIndex.isFile() ? Uri.fromFile(updatedIndex).toString() : "file:///android_asset/index.html");
+        boolean useHotUpdate = getSharedPreferences("promptpop", MODE_PRIVATE).getBoolean("use-hot-update", false);
+        webView.loadUrl(useHotUpdate && updatedIndex.isFile() ? Uri.fromFile(updatedIndex).toString() : "file:///android_asset/index.html");
     }
 
     private boolean isAllowedApiUrl(URL url) {
@@ -171,6 +180,7 @@ public class MainActivity extends Activity {
                 throw new IllegalStateException("Unable to activate update");
             }
             deleteTree(backup);
+            getSharedPreferences("promptpop", MODE_PRIVATE).edit().putBoolean("use-hot-update", true).apply();
             sendUpdateResult(requestId, 200, manifest.toString(), "");
         } catch (Exception error) {
             sendUpdateResult(requestId, 0, "", error.getMessage() == null ? "Update download failed" : error.getMessage());
