@@ -1,9 +1,13 @@
 package com.promptpop.app;
 
 import android.app.Activity;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.MediaStore;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -102,6 +106,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void reloadUpdatedApp() {
             runOnUiThread(() -> loadAppContent());
+        }
+
+        @JavascriptInterface
+        public void saveImageToGallery(final String requestId, final String source, final String filename) {
+            new Thread(() -> MainActivity.this.saveImageToGallery(requestId, source, filename)).start();
         }
 
     }
@@ -309,6 +318,87 @@ public class MainActivity extends Activity {
     private void sendUpdateResult(String requestId, int status, String body, String error) {
         String script = "window.__nativeUpdateResponse(" + JSONObject.quote(requestId) + "," + status + "," + JSONObject.quote(body) + "," + JSONObject.quote(error) + ");";
         runOnUiThread(() -> webView.evaluateJavascript(script, null));
+    }
+
+    private void saveImageToGallery(String requestId, String source, String filename) {
+        Uri savedUri = null;
+        try {
+            ImageData image = loadImageData(source);
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, filename);
+            values.put(MediaStore.Images.Media.MIME_TYPE, image.mimeType);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Prompt Pop");
+                values.put(MediaStore.Images.Media.IS_PENDING, 1);
+            }
+            ContentResolver resolver = getContentResolver();
+            Uri collection = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                ? MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                : MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+            savedUri = resolver.insert(collection, values);
+            if (savedUri == null) throw new IllegalStateException("Unable to create gallery image");
+            OutputStream output = resolver.openOutputStream(savedUri);
+            if (output == null) throw new IllegalStateException("Unable to write gallery image");
+            output.write(image.bytes);
+            output.close();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues ready = new ContentValues();
+                ready.put(MediaStore.Images.Media.IS_PENDING, 0);
+                resolver.update(savedUri, ready, null, null);
+            }
+            sendSaveImageResult(requestId, savedUri.toString(), "");
+        } catch (Exception error) {
+            if (savedUri != null) getContentResolver().delete(savedUri, null, null);
+            sendSaveImageResult(requestId, "", error.getMessage() == null ? "Unable to save image" : error.getMessage());
+        }
+    }
+
+    private ImageData loadImageData(String source) throws Exception {
+        if (source.startsWith("data:image/")) {
+            int separator = source.indexOf(',');
+            if (separator < 0) throw new IllegalArgumentException("Invalid image data");
+            String header = source.substring(0, separator);
+            String mimeType = header.substring(5, header.indexOf(';'));
+            return new ImageData(Base64.decode(source.substring(separator + 1), Base64.DEFAULT), mimeType);
+        }
+        URL url = new URL(source);
+        if (!"https".equalsIgnoreCase(url.getProtocol())) throw new IllegalArgumentException("Only HTTPS image URLs can be saved");
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        try {
+            connection.setConnectTimeout(30000);
+            connection.setReadTimeout(60000);
+            int status = connection.getResponseCode();
+            if (status < 200 || status >= 300) throw new IllegalStateException("Image server returned HTTP " + status);
+            String contentType = connection.getContentType();
+            if (contentType == null || !contentType.startsWith("image/")) contentType = "image/png";
+            return new ImageData(readBytes(connection.getInputStream()), contentType.split(";")[0]);
+        } finally {
+            connection.disconnect();
+        }
+    }
+
+    private byte[] readBytes(InputStream input) throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int count;
+        while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+        input.close();
+        return output.toByteArray();
+    }
+
+    private void sendSaveImageResult(String requestId, String uri, String error) {
+        String script = "window.__nativeSaveImageResponse(" + JSONObject.quote(requestId) + "," + JSONObject.quote(uri) + "," + JSONObject.quote(error) + ");";
+        runOnUiThread(() -> webView.evaluateJavascript(script, null));
+    }
+
+    private static class ImageData {
+        final byte[] bytes;
+        final String mimeType;
+
+        ImageData(byte[] bytes, String mimeType) {
+            this.bytes = bytes;
+            this.mimeType = mimeType;
+        }
     }
 
     @Override

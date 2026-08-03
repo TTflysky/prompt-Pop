@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.12';
+const APP_VERSION = '1.2.13';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -91,10 +91,16 @@ async function copyText(text) {
   const copied = document.execCommand('copy'); field.remove(); return copied;
 }
 const nativeRequests = new Map();
+const nativeSaveRequests = new Map();
 window.__nativeApiResponse = (id, status, body, error) => {
   const request = nativeRequests.get(id); if (!request) return; nativeRequests.delete(id);
   if (error) return request.reject(new Error(error));
   request.resolve({ ok: status >= 200 && status < 300, status, json: async () => JSON.parse(body || '{}'), text: async () => body || '' });
+};
+window.__nativeSaveImageResponse = (id, uri, error) => {
+  const request = nativeSaveRequests.get(id); if (!request) return; nativeSaveRequests.delete(id);
+  if (error) return request.reject(new Error(error));
+  request.resolve(uri);
 };
 window.__nativeUpdateResponse = (id, status, body, error) => {
   const request = updateRequests.get(id); if (!request) return; updateRequests.delete(id);
@@ -393,8 +399,9 @@ function buildI2IPrompt(prompt, style, poseStrength, styleStrength, negative) {
       ? 'Allow a natural variation of the original pose and gesture while retaining the same person and body proportions.'
       : 'Allow a distinctly new but anatomically natural pose and action for the same person; preserve their identity and body proportions.';
   return [
-    'REFERENCE IMAGE IS A BINDING SUBJECT REFERENCE. Preserve the same primary person from the uploaded image: apparent age group, gender presentation, facial identity, hairstyle, body proportions, skin tone, and recognizable features. Do not substitute the person with a different person or a different gender.',
-    'Keep the person as the main subject. Preserve pose, framing, and camera relationship unless the user explicitly asks to change one of them. The uploaded image must remain visibly recognizable in the result.',
+    'REFERENCE IMAGE IS A BINDING IDENTITY REFERENCE. Keep the same primary person recognizable: apparent age group, gender presentation, facial identity, hairstyle, body proportions, skin tone, and key features. Do not substitute the person with a different person or a different gender.',
+    'Re-render the entire person natively inside the requested style and scene. Adapt the face rendering, hair treatment, clothing, materials, color grading, lighting, shadows, and texture to the target art direction so the person looks integrated, never like a pasted photographic cutout.',
+    'Keep the person as the main subject. Preserve framing and camera relationship unless the user explicitly asks to change them. The uploaded image must remain recognizably the same person, while the full image can be artistically reinterpreted.',
     `Person pose and body variation: ${poseStrength}%. ${poseDirection}`,
     `Style and scene transformation: ${styleStrength}%. ${transformation}`,
     `Requested visual direction: ${style}.`,
@@ -407,6 +414,14 @@ function makeImageFilename(kind) { return `prompt-pop-${kind}-${new Date().toISO
 async function saveGeneratedImage(url, kind) {
   if (!url) return showToast('请先生成图片');
   const filename = makeImageFilename(kind);
+  if (window.PromptPopNative?.saveImageToGallery) {
+    const id = `save-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    try {
+      await new Promise((resolve, reject) => { nativeSaveRequests.set(id, { resolve, reject }); window.PromptPopNative.saveImageToGallery(id, url, filename); });
+      showToast('已保存到系统相册');
+      return;
+    } catch (error) { showToast(`保存到相册失败：${error.message}`); return; }
+  }
   try {
     const response = await fetch(url); if (!response.ok) throw new Error('图片下载失败');
     const blob = await response.blob(); const file = new File([blob], filename, { type: blob.type || 'image/png' });
