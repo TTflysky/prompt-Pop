@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.11';
+const APP_VERSION = '1.2.12';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -43,6 +43,8 @@ let selectedMode = localStorage.getItem('prompt-pop-mode') || 'pro';
 let lastResult = '';
 let history = JSON.parse(localStorage.getItem('prompt-pop-history') || '[]');
 let soundEnabled = localStorage.getItem('prompt-pop-sound') !== 'off';
+let soundPreset = localStorage.getItem('prompt-pop-sound-preset') || 'fc';
+let soundVolume = Number(localStorage.getItem('prompt-pop-sound-volume') || 80);
 let audioContext;
 const storedSettings = JSON.parse(localStorage.getItem('prompt-pop-settings') || 'null');
 if (!storedSettings && localStorage.getItem('prompt-pop-key')) {
@@ -58,9 +60,28 @@ function playSound(type = 'click') {
   if (!soundEnabled) return;
   audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
   if (audioContext.state === 'suspended') audioContext.resume();
-  const notes = type === 'success' ? [523, 659, 784] : type === 'error' ? [180, 140] : type === 'tab' ? [440, 660] : [520];
+  const profiles = {
+    fc: { waveform: 'square', click: [660], tab: [440, 660], success: [523, 659, 784], error: [196, 147], spacing: .055, duration: .095 },
+    mac: { waveform: 'sine', click: [1047], tab: [784, 1047], success: [659, 880, 1319], error: [392, 294], spacing: .07, duration: .16 },
+    arcade: { waveform: 'sawtooth', click: [330, 495], tab: [330, 494, 659], success: [440, 660, 880, 1320], error: [220, 165, 110], spacing: .045, duration: .12 }
+  };
+  const profile = profiles[soundPreset] || profiles.fc;
+  const notes = profile[type] || profile.click;
   const now = audioContext.currentTime;
-  notes.forEach((frequency, index) => { const oscillator = audioContext.createOscillator(); const gain = audioContext.createGain(); oscillator.type = type === 'error' ? 'sawtooth' : 'square'; oscillator.frequency.value = frequency; gain.gain.setValueAtTime(0.0001, now + index * 0.055); gain.gain.exponentialRampToValueAtTime(type === 'click' ? 0.025 : 0.04, now + index * 0.055 + 0.008); gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.055 + 0.085); oscillator.connect(gain).connect(audioContext.destination); oscillator.start(now + index * 0.055); oscillator.stop(now + index * 0.055 + 0.1); });
+  const peak = (soundVolume / 100) * (soundPreset === 'mac' ? .14 : .12);
+  notes.forEach((frequency, index) => {
+    const start = now + index * profile.spacing;
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    oscillator.type = type === 'error' ? 'sawtooth' : profile.waveform;
+    oscillator.frequency.setValueAtTime(frequency, start);
+    if (soundPreset === 'arcade' && type !== 'error') oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.12, start + profile.duration * .45);
+    gain.gain.setValueAtTime(.0001, start);
+    gain.gain.exponentialRampToValueAtTime(peak, start + .008);
+    gain.gain.exponentialRampToValueAtTime(.0001, start + profile.duration);
+    oscillator.connect(gain).connect(audioContext.destination);
+    oscillator.start(start); oscillator.stop(start + profile.duration + .02);
+  });
 }
 function showToast(message) { toast.textContent = message; toast.classList.add('show'); playSound(/失败|错误/.test(message) ? 'error' : /完成|成功|已保存|已复制/.test(message) ? 'success' : 'click'); clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove('show'), 2200); }
 async function copyText(text) {
@@ -195,6 +216,25 @@ document.querySelectorAll('.model-picker-trigger').forEach(button => button.addE
 $('#closeModelPicker').addEventListener('click', () => { modelPickerSheet.hidden = true; });
 $('#historyButton').addEventListener('click', () => { renderHistory(); historyDialog.showModal(); });
 $('#closeHistory').addEventListener('click', () => historyDialog.close());
+function syncAudioPanel() {
+  document.querySelectorAll('[data-sound-preset]').forEach(button => button.classList.toggle('active', button.dataset.soundPreset === soundPreset));
+  $('#soundVolume').value = soundVolume;
+  $('#soundVolumeValue').textContent = `${soundVolume}%`;
+}
+document.querySelectorAll('[data-sound-preset]').forEach(button => button.addEventListener('click', () => {
+  soundPreset = button.dataset.soundPreset;
+  soundEnabled = true;
+  localStorage.setItem('prompt-pop-sound-preset', soundPreset);
+  localStorage.setItem('prompt-pop-sound', 'on');
+  syncAudioPanel();
+  showToast(`已切换为 ${button.textContent}`);
+}));
+$('#soundVolume').addEventListener('input', event => {
+  soundVolume = Number(event.target.value);
+  localStorage.setItem('prompt-pop-sound-volume', soundVolume);
+  $('#soundVolumeValue').textContent = `${soundVolume}%`;
+});
+syncAudioPanel();
 $('#themeButton').addEventListener('click', () => { document.body.classList.toggle('dark'); localStorage.setItem('prompt-pop-theme', document.body.classList.contains('dark') ? 'dark' : 'light'); });
 $('#soundButton').addEventListener('click', () => { soundEnabled = !soundEnabled; localStorage.setItem('prompt-pop-sound', soundEnabled ? 'on' : 'off'); $('#soundButton').textContent = soundEnabled ? '♫' : '♩'; if (soundEnabled) playSound('success'); showToast(soundEnabled ? '\u4ea4\u4e92\u97f3\u6548\u5df2\u5f00\u542f' : '\u4ea4\u4e92\u97f3\u6548\u5df2\u5173\u95ed'); });
 document.addEventListener('click', event => { const button = event.target.closest('button'); if (button && button.id !== 'soundButton' && !button.matches('[data-generate-mode]') && !button.matches('.mode-card')) playSound('click'); });
