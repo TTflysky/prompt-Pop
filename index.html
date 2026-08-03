@@ -13,7 +13,7 @@
         <div class="brand-mark" aria-hidden="true">✦</div>
         <div>
           <div class="brand-name">PROMPT POP!</div>
-          <div class="brand-subtitle">提示词优化工坊 · v1.2.17</div>
+          <div class="brand-subtitle">提示词优化工坊 · v1.2.18</div>
         </div>
       </div>
       <div class="toolbar">
@@ -145,7 +145,7 @@
           </article>
           <article class="panel breakdown-result-panel">
             <div class="panel-header green-header"><div class="window-dots"><i></i><i></i><i></i></div><span>STYLE DNA</span><span class="counter" id="breakdownCount">0 字</span></div>
-            <div class="breakdown-result-body breakdown-only-body"><pre id="breakdownResult">上传图片后，详细的风格化提示词会显示在这里。</pre><textarea id="breakdownPrompt" placeholder="拆解完成后可在这里修改并带入文生图"></textarea></div>
+            <div class="breakdown-result-body breakdown-only-body"><pre id="breakdownResult">上传图片后，详细的风格化提示词会显示在这里。</pre></div>
             <div class="panel-footer"><button class="soft-button" id="copyBreakdownButton" type="button">▣ <span>复制拆解</span></button><button class="action-button orange" id="sendToTextToImageButton" type="button">✦ <span>带入文生图</span></button></div>
           </article>
         </div>
@@ -180,7 +180,7 @@
         <div class="model-picker-sheet" id="modelPickerSheet" hidden>
           <div class="model-picker-card"><div class="dialog-top"><span id="modelPickerTitle">选择模型</span><button class="close-button" id="closeModelPicker" type="button" aria-label="关闭">×</button></div><div class="model-picker-list" id="modelPickerList"></div></div>
         </div>
-        <section class="update-panel" aria-label="版本更新"><div><strong>版本更新</strong><span id="updateStatus">当前版本 v1.2.17</span></div><div class="update-actions"><button class="soft-button" id="checkUpdateButton" type="button">检查更新</button><button class="action-button blue" id="applyUpdateButton" type="button" hidden>立即更新</button></div></section>
+        <section class="update-panel" aria-label="版本更新"><div><strong>版本更新</strong><span id="updateStatus">当前版本 v1.2.18</span></div><div class="update-actions"><button class="soft-button" id="checkUpdateButton" type="button">检查更新</button><button class="action-button blue" id="applyUpdateButton" type="button" hidden>立即更新</button></div></section>
         <section class="audio-panel" aria-label="互动音效"><strong>互动音效</strong><div class="sound-presets" role="group" aria-label="音效风格"><button class="sound-preset" data-sound-preset="fc" type="button">FC 电子音</button><button class="sound-preset" data-sound-preset="mac" type="button">Mac 轻触感</button><button class="sound-preset" data-sound-preset="arcade" type="button">街机电子音</button></div><label class="sound-volume" for="soundVolume"><span>音量</span><output id="soundVolumeValue">80%</output><input id="soundVolume" type="range" min="20" max="100" value="80" step="1" /></label></section>
         <section class="config-transfer" aria-label="配置导入导出"><strong>配置备份</strong><p>TXT 包含 API Key，请妥善保管。</p><div><button class="soft-button" id="exportConfigButton" type="button">导出 TXT</button><label class="action-button green import-config-button">导入 TXT<input id="importConfigInput" type="file" accept=".txt,text/plain" /></label></div></section>
         <p class="dialog-note">三套配置分别保存在本地。视觉模型负责看图，生图模型负责出图。</p>

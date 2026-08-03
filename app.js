@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.17';
+const APP_VERSION = '1.2.18';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -378,13 +378,14 @@ async function analyzeImage() {
   try {
     const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: config.model, temperature: 0.25, max_tokens: 4000, messages: [{ role: 'system', content: instruction }, { role: 'user', content: [{ type: 'text', text: '\u8bf7\u5f00\u59cb\u5206\u6790\u8fd9\u5f20\u56fe\u7247\u3002' }, { type: 'image_url', image_url: { url: breakdownImageData } }] }] }) });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json(); lastBreakdown = data.choices?.[0]?.message?.content?.trim() || '\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u5206\u6790\u7ed3\u679c'; $('#breakdownResult').textContent = lastBreakdown; const finalPrompt = detail === '快速概括' ? lastBreakdown : lastBreakdown.split(/FINAL STYLE PROMPT:/i).pop().trim(); $('#breakdownPrompt').value = finalPrompt || lastBreakdown; $('#breakdownCount').textContent = `${lastBreakdown.length} \u5b57`; showToast('\u98ce\u683c\u62c6\u89e3\u5b8c\u6210');
+    const data = await response.json(); lastBreakdown = data.choices?.[0]?.message?.content?.trim() || '\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u5206\u6790\u7ed3\u679c'; $('#breakdownResult').textContent = lastBreakdown; $('#breakdownCount').textContent = `${lastBreakdown.length} \u5b57`; showToast('\u98ce\u683c\u62c6\u89e3\u5b8c\u6210');
   } catch (error) { showToast(`\u5206\u6790\u5931\u8d25\uff1a${error.message}`); }
   finally { button.disabled = false; button.innerHTML = '\u2726 <span>\u5f00\u59cb\u62c6\u89e3\u56fe\u7247</span>'; }
 }
 $('#analyzeImageButton').addEventListener('click', analyzeImage);
 $('#copyBreakdownButton').addEventListener('click', async () => { if (!lastBreakdown) return showToast('\u8fd8\u6ca1\u6709\u53ef\u590d\u5236\u7684\u62c6\u89e3\u7ed3\u679c'); showToast(await copyText(lastBreakdown) ? '\u62c6\u89e3\u7ed3\u679c\u5df2\u590d\u5236' : '\u590d\u5236\u5931\u8d25\uff0c\u8bf7\u957f\u6309\u6587\u5b57\u590d\u5236'); });
-$('#sendToTextToImageButton').addEventListener('click', () => { const prompt = $('#breakdownPrompt').value.trim(); if (!prompt) return showToast('\u8bf7\u5148\u5b8c\u6210\u62c6\u56fe\u6216\u4fee\u6539\u63d0\u793a\u8bcd'); imagePrompt.value = prompt; imageCount.textContent = `${prompt.length} \u5b57`; activatePanel('image', '#imagePrompt'); showToast('\u5df2\u5e26\u5165\u6587\u751f\u56fe'); });
+function getBreakdownStylePrompt() { const quick = lastBreakdown.match(/整体采用：\s*([\s\S]+)/); return (quick?.[1] || lastBreakdown.split(/FINAL STYLE PROMPT:/i).pop() || '').trim(); }
+$('#sendToTextToImageButton').addEventListener('click', () => { const prompt = getBreakdownStylePrompt(); if (!prompt) return showToast('\u8bf7\u5148\u5b8c\u6210\u62c6\u56fe'); imagePrompt.value = prompt; imageCount.textContent = `${prompt.length} \u5b57`; activatePanel('image', '#imagePrompt'); showToast('\u5df2\u5e26\u5165\u6587\u751f\u56fe'); });
 let directI2IFile = null;
 let directI2IResultUrl = '';
 $('#directI2IUpload').addEventListener('change', event => { const file = event.target.files?.[0]; if (!file) return; directI2IFile = file; $('#directI2IUploadName').textContent = file.name; const reader = new FileReader(); reader.onload = () => { $('#directI2IPreview').src = reader.result; $('#directI2IPreviewWrap').hidden = false; }; reader.readAsDataURL(file); });
