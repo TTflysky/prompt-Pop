@@ -63,7 +63,6 @@ public class MainActivity extends Activity {
                 if (filePathCallback != null) filePathCallback.onReceiveValue(null);
                 filePathCallback = callback;
                 try {
-                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                     String mimeType = "image/*";
                     String[] accepts = params.getAcceptTypes();
                     for (String accept : accepts) if (accept != null && accept.startsWith("text/")) { mimeType = "text/plain"; break; }
@@ -80,10 +79,10 @@ public class MainActivity extends Activity {
                         startActivityForResult(camera, CAMERA_CAPTURE_REQUEST);
                         return true;
                     }
-                    intent.setType(mimeType);
-                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    Intent intent = mimeType.startsWith("image/")
+                        ? new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+                        : new Intent(Intent.ACTION_OPEN_DOCUMENT).setType(mimeType).addCategory(Intent.CATEGORY_OPENABLE);
                     intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false);
-                    if (mimeType.startsWith("image/")) { intent.setAction(Intent.ACTION_PICK); intent.setData(MediaStore.Images.Media.EXTERNAL_CONTENT_URI); }
                     startActivityForResult(intent, FILE_CHOOSER_REQUEST);
                     return true;
                 } catch (Exception error) {
@@ -153,8 +152,18 @@ public class MainActivity extends Activity {
 
     private void loadAppContent() {
         File updatedIndex = getUpdatedIndex();
+        String nativeVersion = getPackageVersion();
+        String storedNativeVersion = getSharedPreferences("promptpop", MODE_PRIVATE).getString("native-version", "");
+        if (!nativeVersion.equals(storedNativeVersion)) {
+            getSharedPreferences("promptpop", MODE_PRIVATE).edit().putString("native-version", nativeVersion).putBoolean("use-hot-update", false).apply();
+        }
         boolean useHotUpdate = getSharedPreferences("promptpop", MODE_PRIVATE).getBoolean("use-hot-update", false);
         webView.loadUrl(useHotUpdate && updatedIndex.isFile() ? Uri.fromFile(updatedIndex).toString() : "file:///android_asset/index.html");
+    }
+
+    private String getPackageVersion() {
+        try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; }
+        catch (Exception error) { return ""; }
     }
 
     private boolean isAllowedApiUrl(URL url) {
