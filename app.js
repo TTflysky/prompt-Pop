@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.21';
+const APP_VERSION = '1.2.22';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -455,6 +455,22 @@ function buildI2IPrompt(prompt, style, poseStrength, styleStrength, negative) {
   ].filter(Boolean).join('\n');
 }
 function makeImageFilename(kind) { return `prompt-pop-${kind}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`; }
+const framePresets = [
+  ['经典黑边', '#111', '#fff', 34], ['奶油相纸', '#fff4d6', '#fff', 46], ['拍立得', '#fff', '#fff', 58], ['富士绿', '#176e57', '#e8f4e7', 38], ['柯达黄', '#f2c500', '#fff7cf', 42],
+  ['红色杂志', '#e53935', '#fff0ec', 42], ['宝丽蓝', '#1878de', '#edf5ff', 38], ['粉色漫画', '#ff4f9a', '#fff0f8', 36], ['复古棕', '#704a2e', '#f5e4c9', 44], ['银盐黑白', '#d4d4d4', '#111', 36],
+  ['霓虹紫', '#7d3cff', '#f1eaff', 38], ['赛博青', '#00c9c8', '#e5ffff', 38], ['森林绿', '#2f7c49', '#ebf7e7', 42], ['橙色胶片', '#ef791b', '#fff2db', 44], ['蓝晒印刷', '#174d8a', '#dceaff', 40],
+  ['金色画框', '#b48a2f', '#fff9e6', 48], ['白色双线', '#fff', '#f7f7f7', 42], ['黑金海报', '#111', '#fcce2e', 46], ['薄荷波普', '#46cdaa', '#edfff8', 38], ['樱桃红', '#d91f3e', '#fff0f2', 40]
+];
+let pendingImageExport = null;
+let selectedFrameIndex = 0;
+function renderFrameOptions() { $('#frameGrid').innerHTML = framePresets.map(([name, color, fill, size], index) => `<button class="frame-option ${index === selectedFrameIndex ? 'active' : ''}" data-frame-index="${index}" type="button"><span class="frame-swatch" style="--frame-color:${color};--frame-fill:${fill};--frame-size:${Math.max(5, Math.round(size / 6))}px"></span>${name}</button>`).join(''); }
+function openFramePicker(url, kind) { if (!url) return showToast('请先生成图片'); pendingImageExport = { url, kind }; selectedFrameIndex = 0; renderFrameOptions(); $('#frameDialog').showModal(); }
+$('#frameGrid').addEventListener('click', event => { const button = event.target.closest('[data-frame-index]'); if (!button) return; selectedFrameIndex = Number(button.dataset.frameIndex); renderFrameOptions(); });
+$('#closeFrameDialog').addEventListener('click', () => $('#frameDialog').close());
+function loadExportImage(url) { return new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = () => reject(new Error('图片读取失败')); image.src = url; }); }
+async function addFrameToImage(url, frame) { const image = await loadExportImage(url); const [, color, fill, padding] = frame; const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth + padding * 2; canvas.height = image.naturalHeight + padding * 2; const context = canvas.getContext('2d'); context.fillStyle = color; context.fillRect(0, 0, canvas.width, canvas.height); context.fillStyle = fill; context.fillRect(Math.round(padding * .35), Math.round(padding * .35), canvas.width - Math.round(padding * .7), canvas.height - Math.round(padding * .7)); context.drawImage(image, padding, padding, image.naturalWidth, image.naturalHeight); return canvas.toDataURL('image/png'); }
+$('#exportOriginalButton').addEventListener('click', () => { const item = pendingImageExport; $('#frameDialog').close(); if (item) saveGeneratedImage(item.url, item.kind); });
+$('#exportFramedButton').addEventListener('click', async () => { const item = pendingImageExport; if (!item) return; const button = $('#exportFramedButton'); button.disabled = true; try { const framed = await addFrameToImage(item.url, framePresets[selectedFrameIndex]); $('#frameDialog').close(); await saveGeneratedImage(framed, `${item.kind}-frame`); } catch (error) { showToast(`相框处理失败：${error.message}`); } finally { button.disabled = false; } });
 async function saveGeneratedImage(url, kind) {
   if (!url) return showToast('请先生成图片');
   const filename = makeImageFilename(kind);
@@ -475,8 +491,8 @@ async function saveGeneratedImage(url, kind) {
     const link = document.createElement('a'); link.href = url; link.download = filename; link.target = '_blank'; document.body.append(link); link.click(); link.remove(); showToast('已请求保存图片');
   }
 }
-$('#saveTextToImageButton').addEventListener('click', () => saveGeneratedImage(generatedImageUrl, 'text-to-image'));
-$('#saveDirectI2IButton').addEventListener('click', () => saveGeneratedImage(directI2IResultUrl, 'image-to-image'));
+$('#saveTextToImageButton').addEventListener('click', () => openFramePicker(generatedImageUrl, 'text-to-image'));
+$('#saveDirectI2IButton').addEventListener('click', () => openFramePicker(directI2IResultUrl, 'image-to-image'));
 function openImagePreview(url) { if (!url) return; $('#fullImagePreview').src = url; $('#imagePreviewDialog').showModal(); }
 $('#imageOutput').addEventListener('click', event => { if (event.target.tagName === 'IMG') openImagePreview(generatedImageUrl); });
 $('#directI2IOutput').addEventListener('click', event => { if (event.target.tagName === 'IMG') openImagePreview(directI2IResultUrl); });
