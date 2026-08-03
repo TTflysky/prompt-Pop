@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.20';
+const APP_VERSION = '1.2.21';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -423,7 +423,7 @@ const imagePresets = [
   ['黑白电影', 'black and white cinematic portrait, silver gelatin film grain, dramatic side light, deep shadows, timeless editorial frame']
 ];
 $('#quickPresets').innerHTML = imagePresets.map(([name], index) => `<button class="quick-preset" data-preset-index="${index}" type="button">${name}</button>`).join('');
-$('#quickPresets').addEventListener('click', event => { const button = event.target.closest('[data-preset-index]'); if (!button) return; const [, prompt] = imagePresets[Number(button.dataset.presetIndex)]; $('#directI2IPrompt').value = prompt; if (!directI2IFile) return showToast('请先从相册选择或拍摄参考图'); generateDirectI2I(); });
+$('#quickPresets').addEventListener('click', event => { const button = event.target.closest('[data-preset-index]'); if (!button) return; const [name, prompt] = imagePresets[Number(button.dataset.presetIndex)]; $('#directI2IPrompt').value = prompt; showToast(`已应用“${name}”，请点击生成图生图`); });
 function appendImageReferenceFidelity(form, config, model) {
   if (config.provider === 'openai' && /^gpt-image-1(?:\.5)?$/i.test(model)) form.append('input_fidelity', 'high');
 }
