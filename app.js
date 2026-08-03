@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.15';
+const APP_VERSION = '1.2.16';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -410,22 +410,24 @@ function appendImageReferenceFidelity(form, config, model) {
 }
 function buildI2IPrompt(prompt, style, poseStrength, styleStrength, negative) {
   const styleLevel = Number(styleStrength);
-  const poseLevel = Number(poseStrength);
+  const referenceLevel = Number(poseStrength);
   const transformation = styleLevel <= 30
     ? 'Make only subtle refinements to lighting, color, texture, and styling.'
     : styleLevel <= 70
       ? 'Make clear stylistic and environmental changes while keeping the referenced person unmistakably the same.'
       : 'Apply a bold transformation to style, clothing, background, lighting, and artistic treatment, but never replace the referenced person.';
-  const poseDirection = poseLevel <= 20
-    ? 'Keep the original pose and body posture nearly unchanged.'
-    : poseLevel <= 60
-      ? 'Allow a natural variation of the original pose and gesture while retaining the same person and body proportions.'
-      : 'Allow a distinctly new but anatomically natural pose and action for the same person; preserve their identity and body proportions.';
+  const referenceDirection = referenceLevel <= 20
+    ? 'Keep only the reference face identity. Freely generate a new expression, pose, action, body gesture, and outfit from the user prompt and target style.'
+    : referenceLevel <= 60
+      ? 'Keep the reference face identity and broadly similar body proportions, but allow the user prompt to substantially reinterpret expression, pose, action, and outfit.'
+      : referenceLevel <= 85
+        ? 'Keep the reference face identity, expression mood, pose, gesture, and outfit direction broadly recognizable, allowing only natural stylistic adaptation.'
+        : 'Faithfully preserve the reference face identity, expression, pose, gesture, body posture, and outfit while applying the requested image style.';
   return [
-    'REFERENCE IMAGE IS A BINDING IDENTITY REFERENCE. Keep the same primary person recognizable: apparent age group, gender presentation, facial identity, hairstyle, body proportions, skin tone, and key features. Do not substitute the person with a different person or a different gender.',
-    'Re-render the entire person natively inside the requested style and scene. Adapt the face rendering, hair treatment, clothing, materials, color grading, lighting, shadows, and texture to the target art direction so the person looks integrated, never like a pasted photographic cutout.',
-    'Keep the person as the main subject. Preserve framing and camera relationship unless the user explicitly asks to change them. The uploaded image must remain recognizably the same person, while the full image can be artistically reinterpreted.',
-    `Person pose and body variation: ${poseStrength}%. ${poseDirection}`,
+    'REFERENCE IMAGE IS A BINDING FACE IDENTITY REFERENCE. The generated person must have the same face identity and recognizable facial features as the reference image at every setting. Never swap the face, gender, age group, or identity.',
+    'Re-render the entire person natively inside the requested style and scene. The face, skin, hair, clothing, materials, color grading, lighting, shadows, and texture must all belong to the same coherent target art direction, never like a pasted photographic cutout.',
+    'Keep the person as the main subject. The full image may be artistically reinterpreted, but the face must remain recognizably the same person.',
+    `Person reference fidelity: ${poseStrength}%. ${referenceDirection}`,
     `Style and scene transformation: ${styleStrength}%. ${transformation}`,
     `Requested visual direction: ${style}.`,
     prompt ? `User-requested changes: ${prompt}` : '',
