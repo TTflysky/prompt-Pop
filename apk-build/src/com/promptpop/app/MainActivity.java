@@ -31,11 +31,13 @@ import java.util.UUID;
 
 public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 1001;
+    private static final int CAMERA_CAPTURE_REQUEST = 1002;
     private static final String UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json";
     private static final String UPDATE_ASSET_ROOT = "https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/";
     private static final String[] UPDATE_FILES = {"index.html", "styles.css", "app.js"};
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
+    private Uri cameraImageUri;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,9 +67,23 @@ public class MainActivity extends Activity {
                     String mimeType = "image/*";
                     String[] accepts = params.getAcceptTypes();
                     for (String accept : accepts) if (accept != null && accept.startsWith("text/")) { mimeType = "text/plain"; break; }
+                    if (params.isCaptureEnabled() && mimeType.startsWith("image/")) {
+                        ContentValues values = new ContentValues();
+                        values.put(MediaStore.Images.Media.DISPLAY_NAME, "prompt-pop-camera-" + System.currentTimeMillis() + ".jpg");
+                        values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) values.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Prompt Pop");
+                        cameraImageUri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                        if (cameraImageUri == null) throw new IllegalStateException("Unable to prepare camera image");
+                        Intent camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                        camera.putExtra(MediaStore.EXTRA_OUTPUT, cameraImageUri);
+                        camera.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivityForResult(camera, CAMERA_CAPTURE_REQUEST);
+                        return true;
+                    }
                     intent.setType(mimeType);
                     intent.addCategory(Intent.CATEGORY_OPENABLE);
                     intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false);
+                    if (mimeType.startsWith("image/")) { intent.setAction(Intent.ACTION_PICK); intent.setData(MediaStore.Images.Media.EXTERNAL_CONTENT_URI); }
                     startActivityForResult(intent, FILE_CHOOSER_REQUEST);
                     return true;
                 } catch (Exception error) {
@@ -448,6 +464,14 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == CAMERA_CAPTURE_REQUEST) {
+            if (filePathCallback != null) {
+                filePathCallback.onReceiveValue(resultCode == RESULT_OK && cameraImageUri != null ? new Uri[]{cameraImageUri} : null);
+                filePathCallback = null;
+            }
+            cameraImageUri = null;
+            return;
+        }
         if (requestCode == FILE_CHOOSER_REQUEST) {
             if (filePathCallback != null) {
                 filePathCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));

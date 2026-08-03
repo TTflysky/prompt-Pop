@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.18';
+const APP_VERSION = '1.2.19';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -388,7 +388,9 @@ function getBreakdownStylePrompt() { const quick = lastBreakdown.match(/整体�
 $('#sendToTextToImageButton').addEventListener('click', () => { const prompt = getBreakdownStylePrompt(); if (!prompt) return showToast('\u8bf7\u5148\u5b8c\u6210\u62c6\u56fe'); imagePrompt.value = prompt; imageCount.textContent = `${prompt.length} \u5b57`; activatePanel('image', '#imagePrompt'); showToast('\u5df2\u5e26\u5165\u6587\u751f\u56fe'); });
 let directI2IFile = null;
 let directI2IResultUrl = '';
-$('#directI2IUpload').addEventListener('change', event => { const file = event.target.files?.[0]; if (!file) return; directI2IFile = file; $('#directI2IUploadName').textContent = file.name; const reader = new FileReader(); reader.onload = () => { $('#directI2IPreview').src = reader.result; $('#directI2IPreviewWrap').hidden = false; }; reader.readAsDataURL(file); });
+function setDirectI2IReference(file) { if (!file) return; directI2IFile = file; $('#directI2IUploadName').textContent = file.name || '已拍摄参考图'; const reader = new FileReader(); reader.onload = () => { $('#directI2IPreview').src = reader.result; $('#directI2IPreviewWrap').hidden = false; showToast('参考图已加载'); }; reader.readAsDataURL(file); }
+$('#directI2IUpload').addEventListener('change', event => setDirectI2IReference(event.target.files?.[0]));
+$('#directI2ICamera').addEventListener('change', event => setDirectI2IReference(event.target.files?.[0]));
 $('#removeDirectI2IButton').addEventListener('click', () => { directI2IFile = null; $('#directI2IUpload').value = ''; $('#directI2IUploadName').textContent = '点击选择图片，支持 PNG / JPG / WEBP'; $('#directI2IPreviewWrap').hidden = true; });
 $('#directI2IPoseStrength').addEventListener('input', event => { $('#directI2IPoseStrengthValue').textContent = `${event.target.value}%`; });
 $('#directI2IStrength').addEventListener('input', event => { $('#directI2IStrengthValue').textContent = `${event.target.value}%`; });
@@ -408,6 +410,20 @@ async function generateDirectI2I() {
   finally { button.disabled = false; button.innerHTML = '\u2301 <span>\u751f\u6210\u56fe\u751f\u56fe</span>'; }
 }
 $('#generateDirectI2IButton').addEventListener('click', generateDirectI2I);
+const imagePresets = [
+  ['富士胶片人像', 'Fujifilm Superia film portrait, soft daylight, gentle green and cyan cast, subtle film grain, natural skin tone, candid editorial photography'],
+  ['复古印刷海报', 'retro art poster, risograph-inspired photo treatment, screen print grain, limited ink palette, vintage magazine cover aesthetic'],
+  ['CCD 闪光夜拍', 'early 2000s CCD camera flash photography, direct flash, nightlife candid, cool blue shadows, slight motion blur, nostalgic digital grain'],
+  ['日杂清透', 'Japanese lifestyle magazine photography, clean natural light, airy composition, soft pastel color grading, relaxed editorial mood'],
+  ['港风霓虹', 'Hong Kong neon night photography, saturated red and cyan practical lights, cinematic rain reflections, urban film still'],
+  ['法式杂志', 'French fashion editorial, soft window light, muted cream and wine palette, refined texture, effortless composition'],
+  ['油画肖像', 'classical oil portrait painting, visible brushwork, museum canvas texture, dramatic soft chiaroscuro, rich pigments'],
+  ['梦核柔焦', 'dreamcore photography, soft focus, hazy glow, pastel liminal atmosphere, gentle surreal color palette'],
+  ['赛博机能', 'cyberpunk fashion portrait, neon rim lighting, wet reflective surfaces, futuristic city atmosphere, high contrast'],
+  ['黑白电影', 'black and white cinematic portrait, silver gelatin film grain, dramatic side light, deep shadows, timeless editorial frame']
+];
+$('#quickPresets').innerHTML = imagePresets.map(([name], index) => `<button class="quick-preset" data-preset-index="${index}" type="button">${name}</button>`).join('');
+$('#quickPresets').addEventListener('click', event => { const button = event.target.closest('[data-preset-index]'); if (!button) return; const [, prompt] = imagePresets[Number(button.dataset.presetIndex)]; $('#directI2IPrompt').value = prompt; if (!directI2IFile) return showToast('请先从相册选择或拍摄参考图'); generateDirectI2I(); });
 function appendImageReferenceFidelity(form, config, model) {
   if (config.provider === 'openai' && /^gpt-image-1(?:\.5)?$/i.test(model)) form.append('input_fidelity', 'high');
 }
