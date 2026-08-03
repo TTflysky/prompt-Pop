@@ -62,7 +62,10 @@ public class MainActivity extends Activity {
                 filePathCallback = callback;
                 try {
                     Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                    intent.setType("image/*");
+                    String mimeType = "image/*";
+                    String[] accepts = params.getAcceptTypes();
+                    for (String accept : accepts) if (accept != null && accept.startsWith("text/")) { mimeType = "text/plain"; break; }
+                    intent.setType(mimeType);
                     intent.addCategory(Intent.CATEGORY_OPENABLE);
                     intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false);
                     startActivityForResult(intent, FILE_CHOOSER_REQUEST);
@@ -111,6 +114,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void saveImageToGallery(final String requestId, final String source, final String filename) {
             new Thread(() -> MainActivity.this.saveImageToGallery(requestId, source, filename)).start();
+        }
+
+        @JavascriptInterface
+        public void saveTextFile(final String requestId, final String text, final String filename) {
+            new Thread(() -> MainActivity.this.saveTextFile(requestId, text, filename)).start();
         }
 
     }
@@ -353,6 +361,32 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void saveTextFile(String requestId, String text, String filename) {
+        Uri savedUri = null;
+        try {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Downloads.DISPLAY_NAME, filename);
+            values.put(MediaStore.Downloads.MIME_TYPE, "text/plain");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.put(MediaStore.Downloads.RELATIVE_PATH, "Download/Prompt Pop");
+                values.put(MediaStore.Downloads.IS_PENDING, 1);
+            }
+            ContentResolver resolver = getContentResolver();
+            Uri collection = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY) : MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+            savedUri = resolver.insert(collection, values);
+            if (savedUri == null) throw new IllegalStateException("Unable to create config file");
+            OutputStream output = resolver.openOutputStream(savedUri);
+            if (output == null) throw new IllegalStateException("Unable to write config file");
+            output.write(text.getBytes(StandardCharsets.UTF_8));
+            output.close();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { ContentValues ready = new ContentValues(); ready.put(MediaStore.Downloads.IS_PENDING, 0); resolver.update(savedUri, ready, null, null); }
+            sendSaveTextResult(requestId, savedUri.toString(), "");
+        } catch (Exception error) {
+            if (savedUri != null) getContentResolver().delete(savedUri, null, null);
+            sendSaveTextResult(requestId, "", error.getMessage() == null ? "Unable to export config" : error.getMessage());
+        }
+    }
+
     private ImageData loadImageData(String source) throws Exception {
         if (source.startsWith("data:image/")) {
             int separator = source.indexOf(',');
@@ -388,6 +422,11 @@ public class MainActivity extends Activity {
 
     private void sendSaveImageResult(String requestId, String uri, String error) {
         String script = "window.__nativeSaveImageResponse(" + JSONObject.quote(requestId) + "," + JSONObject.quote(uri) + "," + JSONObject.quote(error) + ");";
+        runOnUiThread(() -> webView.evaluateJavascript(script, null));
+    }
+
+    private void sendSaveTextResult(String requestId, String uri, String error) {
+        String script = "window.__nativeSaveTextResponse(" + JSONObject.quote(requestId) + "," + JSONObject.quote(uri) + "," + JSONObject.quote(error) + ");";
         runOnUiThread(() -> webView.evaluateJavascript(script, null));
     }
 

@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.13';
+const APP_VERSION = '1.2.14';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -92,6 +92,7 @@ async function copyText(text) {
 }
 const nativeRequests = new Map();
 const nativeSaveRequests = new Map();
+const nativeTextSaveRequests = new Map();
 window.__nativeApiResponse = (id, status, body, error) => {
   const request = nativeRequests.get(id); if (!request) return; nativeRequests.delete(id);
   if (error) return request.reject(new Error(error));
@@ -102,6 +103,7 @@ window.__nativeSaveImageResponse = (id, uri, error) => {
   if (error) return request.reject(new Error(error));
   request.resolve(uri);
 };
+window.__nativeSaveTextResponse = (id, uri, error) => { const request = nativeTextSaveRequests.get(id); if (!request) return; nativeTextSaveRequests.delete(id); if (error) return request.reject(new Error(error)); request.resolve(uri); };
 window.__nativeUpdateResponse = (id, status, body, error) => {
   const request = updateRequests.get(id); if (!request) return; updateRequests.delete(id);
   if (error) return request.reject(new Error(error));
@@ -195,6 +197,27 @@ $('#settingsButton').addEventListener('click', () => { loadSettings(); settingsD
 $('#checkUpdateButton').addEventListener('click', checkForUpdate);
 $('#applyUpdateButton').addEventListener('click', applyHotUpdate);
 $('#settingsForm').addEventListener('submit', event => { event.preventDefault(); const configs = { text: { provider: textProviderInput.value, apiKey: $('#textApiKey').value.trim(), baseUrl: textBaseUrlInput.value.trim(), model: textModelInput.value.trim() }, vision: { provider: visionProviderInput.value, apiKey: $('#visionApiKey').value.trim(), baseUrl: visionBaseUrlInput.value.trim(), model: visionModelInput.value.trim() }, image: { provider: imageProviderInput.value, apiKey: $('#imageApiKey').value.trim(), baseUrl: imageBaseUrlInput.value.trim(), model: imageServiceModelInput.value.trim() } }; localStorage.setItem('prompt-pop-settings', JSON.stringify(configs)); localStorage.setItem('prompt-pop-key', configs.text.apiKey); settingsDialog.close(); showToast('\u63a5\u53e3\u8bbe\u7f6e\u5df2\u4fdd\u5b58'); });
+function getConfigBackupText() {
+  const configs = getConfigs(); const lines = ['# Prompt Pop Configuration v1'];
+  ['text', 'vision', 'image'].forEach(group => ['provider', 'apiKey', 'baseUrl', 'model'].forEach(key => lines.push(`${group}.${key}=${String(configs[group][key] || '').replace(/[\r\n]/g, '')}`)));
+  return `${lines.join('\n')}\n`;
+}
+function parseConfigBackup(text) {
+  const configs = { text: {}, vision: {}, image: {} }; let found = 0;
+  text.split(/\r?\n/).forEach(line => { const marker = line.indexOf('='); if (marker < 1 || line.trimStart().startsWith('#')) return; const key = line.slice(0, marker).trim(); const value = line.slice(marker + 1).trim(); const match = /^(text|vision|image)\.(provider|apiKey|baseUrl|model)$/.exec(key); if (match) { configs[match[1]][match[2]] = value; found++; } });
+  if (!found) throw new Error('未识别到 Prompt Pop 配置');
+  ['text', 'vision', 'image'].forEach(group => { configs[group] = { provider: configs[group].provider || 'openai', apiKey: configs[group].apiKey || '', baseUrl: configs[group].baseUrl || '', model: configs[group].model || '' }; });
+  return configs;
+}
+$('#exportConfigButton').addEventListener('click', async () => {
+  const text = getConfigBackupText(); const filename = `prompt-pop-config-${new Date().toISOString().slice(0, 10)}.txt`;
+  try {
+    if (window.PromptPopNative?.saveTextFile) await new Promise((resolve, reject) => { const id = `config-${Date.now()}-${Math.random().toString(16).slice(2)}`; nativeTextSaveRequests.set(id, { resolve, reject }); window.PromptPopNative.saveTextFile(id, text, filename); });
+    else { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' })); link.download = filename; document.body.append(link); link.click(); link.remove(); }
+    showToast('配置 TXT 已导出到下载目录');
+  } catch (error) { showToast(`导出失败：${error.message}`); }
+});
+$('#importConfigInput').addEventListener('change', event => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const configs = parseConfigBackup(String(reader.result || '')); localStorage.setItem('prompt-pop-settings', JSON.stringify(configs)); localStorage.setItem('prompt-pop-key', configs.text.apiKey); loadSettings(); showToast('配置已导入，请点击保存设置'); } catch (error) { showToast(`导入失败：${error.message}`); } finally { event.target.value = ''; } }; reader.readAsText(file, 'UTF-8'); });
 function readConfigFromForm(target) {
   const fields = { text: [textProviderInput, $('#textApiKey'), textBaseUrlInput, textModelInput], vision: [visionProviderInput, $('#visionApiKey'), visionBaseUrlInput, visionModelInput], image: [imageProviderInput, $('#imageApiKey'), imageBaseUrlInput, imageServiceModelInput] }[target];
   return { provider: fields[0].value, apiKey: fields[1].value.trim(), baseUrl: fields[2].value.trim(), model: fields[3].value.trim() };
