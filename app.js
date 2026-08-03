@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.4';
+const APP_VERSION = '1.2.5';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -51,7 +51,8 @@ if (!storedSettings && localStorage.getItem('prompt-pop-key')) {
 
 modeGrid.innerHTML = modes.map(mode => `<button class="mode-card ${mode.id === selectedMode ? 'selected' : ''}" data-mode="${mode.id}"><span class="mode-icon" style="--mode-color:${mode.color}">${mode.icon}</span><strong>${mode.title}</strong><p>${mode.desc}</p></button>`).join('');
 modeGrid.addEventListener('click', event => { const card = event.target.closest('.mode-card'); if (!card) return; selectedMode = card.dataset.mode; localStorage.setItem('prompt-pop-mode', selectedMode); document.querySelectorAll('.mode-card').forEach(item => item.classList.toggle('selected', item === card)); playSound('tab'); });
-document.querySelectorAll('.section-tab').forEach(tab => tab.addEventListener('click', () => { const panel = tab.dataset.panel; document.querySelectorAll('.section-tab').forEach(item => item.classList.toggle('active', item === tab)); document.querySelectorAll('[data-panel-section]').forEach(section => section.classList.toggle('active', section.dataset.panelSection === panel)); window.scrollTo({ top: 0, behavior: 'smooth' }); }));
+function activatePanel(panel, focusTarget) { document.querySelectorAll('.section-tab').forEach(item => item.classList.toggle('active', item.dataset.panel === panel)); document.querySelectorAll('[data-panel-section]').forEach(section => section.classList.toggle('active', section.dataset.panelSection === panel)); window.scrollTo({ top: 0, behavior: 'smooth' }); if (focusTarget) setTimeout(() => $(focusTarget)?.focus(), 260); }
+document.querySelectorAll('.section-tab').forEach(tab => tab.addEventListener('click', () => activatePanel(tab.dataset.panel)));
 function updateCount() { inputCount.textContent = `${rawInput.value.length} \u5b57`; }
 function playSound(type = 'click') {
   if (!soundEnabled) return;
@@ -62,6 +63,12 @@ function playSound(type = 'click') {
   notes.forEach((frequency, index) => { const oscillator = audioContext.createOscillator(); const gain = audioContext.createGain(); oscillator.type = type === 'error' ? 'sawtooth' : 'square'; oscillator.frequency.value = frequency; gain.gain.setValueAtTime(0.0001, now + index * 0.055); gain.gain.exponentialRampToValueAtTime(type === 'click' ? 0.025 : 0.04, now + index * 0.055 + 0.008); gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.055 + 0.085); oscillator.connect(gain).connect(audioContext.destination); oscillator.start(now + index * 0.055); oscillator.stop(now + index * 0.055 + 0.1); });
 }
 function showToast(message) { toast.textContent = message; toast.classList.add('show'); playSound(/失败|错误/.test(message) ? 'error' : /完成|成功|已保存|已复制/.test(message) ? 'success' : 'click'); clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove('show'), 2200); }
+async function copyText(text) {
+  if (!text) return false;
+  try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } } catch { /* Android WebView often blocks the modern clipboard API for local files. */ }
+  const field = document.createElement('textarea'); field.value = text; field.setAttribute('readonly', ''); field.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;'; document.body.append(field); field.focus(); field.select();
+  const copied = document.execCommand('copy'); field.remove(); return copied;
+}
 const nativeRequests = new Map();
 window.__nativeApiResponse = (id, status, body, error) => {
   const request = nativeRequests.get(id); if (!request) return; nativeRequests.delete(id);
@@ -216,17 +223,18 @@ function buildImagePrompt() {
 }
 imageControls.forEach(id => $(`#${id}`).addEventListener('input', buildImagePrompt));
 imageControls.forEach(id => $(`#${id}`).addEventListener('change', buildImagePrompt));
-$('#imageCopyButton').addEventListener('click', async () => { if (!imagePrompt.value) return; await navigator.clipboard.writeText(imagePrompt.value); showToast('\u751f\u56fe\u63d0\u793a\u8bcd\u5df2\u590d\u5236'); });
-$('#useImagePromptButton').addEventListener('click', () => { rawInput.value = imagePrompt.value; updateCount(); rawInput.scrollIntoView({ behavior: 'smooth', block: 'center' }); showToast('\u5df2\u5e26\u5165\u901a\u7528\u4f18\u5316\u5668'); });
+$('#imageCopyButton').addEventListener('click', async () => { if (!imagePrompt.value) return; showToast(await copyText(imagePrompt.value) ? '\u751f\u56fe\u63d0\u793a\u8bcd\u5df2\u590d\u5236' : '\u590d\u5236\u5931\u8d25\uff0c\u8bf7\u957f\u6309\u6587\u5b57\u590d\u5236'); });
+$('#useImagePromptButton').addEventListener('click', () => { rawInput.value = imagePrompt.value; updateCount(); activatePanel('main', '#rawInput'); showToast('\u5df2\u5e26\u5165\u901a\u7528\u4f18\u5316\u5668'); });
 let imageGenerateMode = 'text';
 let imageFile = null;
 let imageReferenceData = '';
 let generatedImageUrl = '';
-document.querySelectorAll('[data-generate-mode]').forEach(button => button.addEventListener('click', () => { imageGenerateMode = button.dataset.generateMode; document.querySelectorAll('[data-generate-mode]').forEach(item => item.classList.toggle('active', item === button)); }));
+function setImageGenerateMode(mode) { imageGenerateMode = mode; document.querySelectorAll('[data-generate-mode]').forEach(item => item.classList.toggle('active', item.dataset.generateMode === mode)); $('#generateImageButton').innerHTML = mode === 'image' ? '⌁ <span>图生图</span>' : '✦ <span>文生图</span>'; }
+document.querySelectorAll('[data-generate-mode]').forEach(button => button.addEventListener('click', () => setImageGenerateMode(button.dataset.generateMode)));
 $('#imageUpload').addEventListener('change', event => {
   imageFile = event.target.files?.[0] || null;
   if (!imageFile) return;
-  imageGenerateMode = 'image'; document.querySelectorAll('[data-generate-mode]').forEach(item => item.classList.toggle('active', item.dataset.generateMode === 'image'));
+  setImageGenerateMode('image');
   $('#imageUploadName').textContent = imageFile.name; $('#imageUploadStatus').textContent = `已选择 ${imageFile.name}，点击“生成图片”开始图生图`;
   const reader = new FileReader(); reader.onload = () => { imageReferenceData = reader.result; $('#imagePreview').src = imageReferenceData; $('#imagePreviewWrap').hidden = false; showToast('\u53c2\u8003\u56fe\u5df2\u52a0\u8f7d'); }; reader.onerror = () => showToast('\u56fe\u7247\u8bfb\u53d6\u5931\u8d25'); reader.readAsDataURL(imageFile);
 });
@@ -249,7 +257,7 @@ async function generateImage() {
   const config = getConfigs().image;
   if (!config.apiKey || !config.baseUrl || !config.model) { settingsDialog.showModal(); showToast('\u8bf7\u5148\u8865\u5168\u751f\u56fe\u6a21\u578b\u8bbe\u7f6e'); return; }
   if (imageGenerateMode === 'image' && !imageFile) { showToast('\u56fe\u751f\u56fe\u8bf7\u5148\u4e0a\u4f20\u53c2\u8003\u56fe'); return; }
-  const button = $('#generateImageButton'); button.disabled = true; button.innerHTML = '\u2026 <span>\u751f\u6210\u4e2d</span>';
+  const button = $('#generateImageButton'); generatedImageUrl = ''; $('#saveTextToImageButton').disabled = true; button.disabled = true; button.innerHTML = '\u2026 <span>\u751f\u6210\u4e2d</span>';
   const endpoint = `${config.baseUrl.replace(/\/$/, '')}/images/${imageGenerateMode === 'image' ? 'edits' : 'generations'}`;
   const imageModel = $('#imageModelCustom').value.trim() || config.model || $('#imageModel').value;
   try {
@@ -264,9 +272,9 @@ async function generateImage() {
     const data = await response.json(); const image = data.data?.[0];
     generatedImageUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || '';
     if (!generatedImageUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247');
-    $('#imageOutput').innerHTML = `<img src="${generatedImageUrl}" alt="生成结果" />`; showToast('\u56fe\u7247\u751f\u6210\u5b8c\u6210');
+    $('#imageOutput').innerHTML = `<img src="${generatedImageUrl}" alt="生成结果" />`; $('#saveTextToImageButton').disabled = false; showToast('\u56fe\u7247\u751f\u6210\u5b8c\u6210');
   } catch (error) { $('#imageOutput').innerHTML = `<div class="image-output-placeholder">${error.message}</div>`; showToast(`\u751f\u6210\u5931\u8d25\uff1a${error.message}`); }
-  finally { button.disabled = false; button.innerHTML = '\u2726 <span>\u751f\u6210\u56fe\u7247</span>'; }
+  finally { button.disabled = false; button.innerHTML = imageGenerateMode === 'image' ? '\u2301 <span>\u56fe\u751f\u56fe</span>' : '\u2726 <span>\u6587\u751f\u56fe</span>'; }
 }
 $('#generateImageButton').addEventListener('click', generateImage);
 async function optimizeImagePrompt() {
@@ -289,6 +297,7 @@ $('#breakdownUpload').addEventListener('change', event => {
   const reader = new FileReader(); reader.onload = () => { breakdownImageData = reader.result; $('#breakdownPreview').src = breakdownImageData; $('#breakdownPreviewWrap').hidden = false; }; reader.readAsDataURL(file);
 });
 $('#removeBreakdownButton').addEventListener('click', () => { breakdownImageData = ''; breakdownFile = null; $('#breakdownUpload').value = ''; $('#breakdownPreviewWrap').hidden = true; });
+$('#imageToImageStrength').addEventListener('input', event => { $('#imageToImageStrengthValue').textContent = `${event.target.value}%`; });
 async function analyzeImage() {
   const config = getConfigs().vision;
   if (!config.apiKey || !config.baseUrl || !config.model) { settingsDialog.showModal(); showToast('\u8bf7\u5148\u914d\u7f6e\u89c6\u89c9\u62c6\u56fe\u6a21\u578b'); return; }
@@ -304,23 +313,45 @@ async function analyzeImage() {
   finally { button.disabled = false; button.innerHTML = '\u2726 <span>\u5f00\u59cb\u62c6\u89e3\u56fe\u7247</span>'; }
 }
 $('#analyzeImageButton').addEventListener('click', analyzeImage);
-$('#copyBreakdownButton').addEventListener('click', async () => { if (!lastBreakdown) return showToast('\u8fd8\u6ca1\u6709\u53ef\u590d\u5236\u7684\u62c6\u89e3\u7ed3\u679c'); await navigator.clipboard.writeText(lastBreakdown); showToast('\u62c6\u89e3\u7ed3\u679c\u5df2\u590d\u5236'); });
-$('#sendToTextToImageButton').addEventListener('click', () => { const prompt = $('#imageToImagePrompt').value.trim(); if (!prompt) return showToast('\u8bf7\u5148\u5b8c\u6210\u62c6\u56fe\u6216\u8f93\u5165\u56fe\u751f\u56fe\u63d0\u793a\u8bcd'); imagePrompt.value = prompt; imageCount.textContent = `${prompt.length} \u5b57`; const tab = document.querySelector('[data-panel="image"]'); tab.click(); showToast('\u5df2\u5e26\u5165\u6587\u751f\u56fe\uff0c\u53ef\u76f4\u63a5\u7f16\u8f91\u6216\u751f\u6210'); });
+$('#copyBreakdownButton').addEventListener('click', async () => { if (!lastBreakdown) return showToast('\u8fd8\u6ca1\u6709\u53ef\u590d\u5236\u7684\u62c6\u89e3\u7ed3\u679c'); showToast(await copyText(lastBreakdown) ? '\u62c6\u89e3\u7ed3\u679c\u5df2\u590d\u5236' : '\u590d\u5236\u5931\u8d25\uff0c\u8bf7\u957f\u6309\u6587\u5b57\u590d\u5236'); });
+$('#sendToTextToImageButton').addEventListener('click', () => { const prompt = $('#imageToImagePrompt').value.trim(); if (!prompt) return showToast('\u8bf7\u5148\u5b8c\u6210\u62c6\u56fe\u6216\u8f93\u5165\u56fe\u751f\u56fe\u63d0\u793a\u8bcd'); imagePrompt.value = prompt; imageCount.textContent = `${prompt.length} \u5b57`; activatePanel('image', '#imagePrompt'); showToast('\u5df2\u5e26\u5165\u6587\u751f\u56fe\uff0c\u53ef\u76f4\u63a5\u7f16\u8f91\u6216\u751f\u6210'); });
 async function generateImageToImage() {
   const prompt = $('#imageToImagePrompt').value.trim(); const config = getConfigs().image;
   if (!breakdownFile) return showToast('\u8bf7\u5148\u4e0a\u4f20\u53c2\u8003\u56fe');
   if (!prompt) return showToast('\u8bf7\u5148\u62c6\u56fe\u6216\u586b\u5199\u56fe\u751f\u56fe\u63d0\u793a\u8bcd');
   if (!config.apiKey || !config.baseUrl || !config.model) { settingsDialog.showModal(); showToast('\u8bf7\u5148\u914d\u7f6e\u751f\u56fe\u6a21\u578b'); return; }
-  const button = $('#generateImageToImageButton'); button.disabled = true; button.innerHTML = '\u2026 <span>\u56fe\u751f\u56fe\u4e2d</span>';
+  const button = $('#generateImageToImageButton'); imageToImageResultUrl = ''; $('#saveImageToImageButton').disabled = true; button.disabled = true; button.innerHTML = '\u2026 <span>\u56fe\u751f\u56fe\u4e2d</span>';
   try {
-    const form = new FormData(); form.append('model', config.model); form.append('prompt', prompt); form.append('size', $('#imageSize').value); form.append('image', breakdownFile, breakdownFile.name);
+    const variation = $('#imageToImageStrength').value; const direction = $('#imageToImageStyle').value; const negative = $('#imageToImageNegative').value.trim();
+    const fullPrompt = [prompt, `Image-to-image direction: ${direction}. Reference variation strength: ${variation}%.`, negative ? `Avoid: ${negative}.` : ''].filter(Boolean).join('\n');
+    const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); form.append('size', $('#imageToImageSize').value); form.append('image', breakdownFile, breakdownFile.name);
     const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/images/edits`, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     if (!response.ok) { const detail = await response.text(); throw new Error(`HTTP ${response.status} ${detail.slice(0, 180)}`); }
-    const data = await response.json(); const image = data.data?.[0]; const resultUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || ''; if (!resultUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247'); $('#imageToImageOutput').innerHTML = `<img src="${resultUrl}" alt="\u56fe\u751f\u56fe\u7ed3\u679c" />`; showToast('\u56fe\u751f\u56fe\u5b8c\u6210');
+    const data = await response.json(); const image = data.data?.[0]; const resultUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || ''; if (!resultUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247'); imageToImageResultUrl = resultUrl; $('#imageToImageOutput').innerHTML = `<img src="${resultUrl}" alt="\u56fe\u751f\u56fe\u7ed3\u679c" />`; $('#saveImageToImageButton').disabled = false; showToast('\u56fe\u751f\u56fe\u5b8c\u6210');
   } catch (error) { $('#imageToImageOutput').innerHTML = `<div class="image-output-placeholder">${error.message}</div>`; showToast(`\u56fe\u751f\u56fe\u5931\u8d25\uff1a${error.message}`); }
   finally { button.disabled = false; button.innerHTML = '\u2301 <span>\u56fe\u751f\u56fe</span>'; }
 }
 $('#generateImageToImageButton').addEventListener('click', generateImageToImage);
+let imageToImageResultUrl = '';
+function makeImageFilename(kind) { return `prompt-pop-${kind}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`; }
+async function saveGeneratedImage(url, kind) {
+  if (!url) return showToast('请先生成图片');
+  const filename = makeImageFilename(kind);
+  try {
+    const response = await fetch(url); if (!response.ok) throw new Error('图片下载失败');
+    const blob = await response.blob(); const file = new File([blob], filename, { type: blob.type || 'image/png' });
+    if (navigator.canShare?.({ files: [file] }) && navigator.share) { await navigator.share({ files: [file], title: 'Prompt Pop 图片' }); showToast('已打开保存/分享面板'); return; }
+    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); showToast('图片已开始保存');
+  } catch (error) {
+    const link = document.createElement('a'); link.href = url; link.download = filename; link.target = '_blank'; document.body.append(link); link.click(); link.remove(); showToast('已请求保存图片');
+  }
+}
+$('#saveTextToImageButton').addEventListener('click', () => saveGeneratedImage(generatedImageUrl, 'text-to-image'));
+$('#saveImageToImageButton').addEventListener('click', () => saveGeneratedImage(imageToImageResultUrl, 'image-to-image'));
+function openImagePreview(url) { if (!url) return; $('#fullImagePreview').src = url; $('#imagePreviewDialog').showModal(); }
+$('#imageOutput').addEventListener('click', event => { if (event.target.tagName === 'IMG') openImagePreview(generatedImageUrl); });
+$('#imageToImageOutput').addEventListener('click', event => { if (event.target.tagName === 'IMG') openImagePreview(imageToImageResultUrl); });
+$('#closeImagePreview').addEventListener('click', () => $('#imagePreviewDialog').close());
 buildImagePrompt();
 
 async function optimize() {
@@ -342,7 +373,7 @@ async function optimize() {
 }
 $('#optimizeButton').addEventListener('click', optimize);
 $('#regenerateButton').addEventListener('click', optimize);
-$('#copyButton').addEventListener('click', async () => { if (!lastResult) return showToast('\u8fd8\u6ca1\u6709\u53ef\u590d\u5236\u7684\u5185\u5bb9'); await navigator.clipboard.writeText(lastResult); showToast('\u5df2\u590d\u5236\u5230\u526a\u8d34\u677f'); });
+$('#copyButton').addEventListener('click', async () => { if (!lastResult) return showToast('\u8fd8\u6ca1\u6709\u53ef\u590d\u5236\u7684\u5185\u5bb9'); showToast(await copyText(lastResult) ? '\u5df2\u590d\u5236\u5230\u526a\u8d34\u677f' : '\u590d\u5236\u5931\u8d25\uff0c\u8bf7\u957f\u6309\u6587\u5b57\u590d\u5236'); });
 rawInput.addEventListener('keydown', event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') optimize(); });
 function renderHistory() { const list = $('#historyList'); list.innerHTML = history.length ? history.map(item => `<div class="history-item"><strong>${item.mode}</strong><div>${item.idea.slice(0, 80)}${item.idea.length > 80 ? '...' : ''}</div><small>${item.time}</small></div>`).join('') : '<p class="muted">\u8fd8\u6ca1\u6709\u4f18\u5316\u8bb0\u5f55\u3002</p>'; }
 updateCount();

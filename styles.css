@@ -97,3 +97,23 @@ dialog { width: min(440px, calc(100% - 30px)); padding: 0; color: var(--ink); ba
   .image-result-panel .panel-footer > * { min-width: calc(50% - 5px); flex: 1 0 calc(50% - 5px); }
   .breakdown-section { margin-top: 32px; }.breakdown-lab { grid-template-columns: 1fr; gap: 20px; }.breakdown-upload-body { padding: 12px; }.breakdown-dropzone { min-height: 185px; }.breakdown-options { gap: 9px; margin-top: 11px; }.breakdown-result-body { height: 420px; padding: 10px; }.breakdown-result-body pre { padding: 13px; border-width: 2px; border-radius: 12px; font-size: 13px; }.breakdown-result-panel .panel-footer { flex-wrap: wrap; }.breakdown-result-panel .panel-footer > * { min-width: calc(50% - 5px); flex: 1 0 calc(50% - 5px); }
 }
+
+/* Image-to-image controls remain available on both desktop and mobile. */
+.image-controls .generation-switch { display: flex; }
+.image-controls .upload-field { display: flex; }
+.image-controls .image-preview-wrap:not([hidden]) { display: block; }
+.img2img-control-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.breakdown-result-body { height: auto; grid-template-rows: minmax(150px, 280px) 145px auto minmax(280px, auto); }
+.breakdown-result-body pre { height: auto; max-height: 280px; }
+.breakdown-result-body textarea { min-height: 145px; }
+.breakdown-result-body .compact-output { min-height: 300px; cursor: zoom-in; }
+.breakdown-result-body .image-output img { width: 100%; height: auto; max-height: 520px; object-fit: contain; }
+.image-preview-dialog { width: min(960px, calc(100% - 24px)); max-height: calc(100dvh - 24px); padding: 18px; overflow: auto; }
+.image-preview-dialog::backdrop { background: rgba(0, 0, 0, .75); }
+.image-preview-dialog img { display: block; width: 100%; max-height: calc(100dvh - 100px); object-fit: contain; background: #111; }
+@media (max-width: 600px) {
+  .img2img-control-grid { grid-template-columns: 1fr; }
+  .breakdown-result-body { height: auto; grid-template-rows: minmax(135px, 240px) 140px auto minmax(265px, auto); }
+  .breakdown-result-body .compact-output { min-height: 265px; }
+  .breakdown-result-panel .panel-footer > * { min-width: calc(50% - 5px); flex: 1 0 calc(50% - 5px); }
+}
