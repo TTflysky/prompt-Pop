@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.26';
+const APP_VERSION = '1.2.27';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -458,10 +458,10 @@ function buildI2IPrompt(prompt, style, poseStrength, styleStrength, negative) {
 }
 function makeImageFilename(kind) { return `prompt-pop-${kind}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`; }
 const framePresets = [
-  ['拍立得手写', '#f7f7f2', '#fff', 'polaroid'], ['35mm 胶片', '#171717', '#f6eed9', 'film'], ['时尚杂志', '#e02f42', '#fff2ef', 'magazine'], ['手账胶带', '#e7a2b6', '#fff7ef', 'tape'], ['复古票根', '#8a5a3b', '#f4e2be', 'ticket'],
-  ['明信片邮戳', '#3b82b4', '#f8f2df', 'postcard'], ['接触印样', '#222', '#f7f7f2', 'contact'], ['画廊卡纸', '#c5a266', '#fbf8ef', 'gallery'], ['邮票边齿', '#556f45', '#f2f2db', 'stamp'], ['撕纸拼贴', '#f4c14d', '#fff8d5', 'torn'],
-  ['日杂便签', '#e9ded0', '#fffdf7', 'note'], ['宝丽蓝晒', '#23508b', '#e9f2ff', 'blueprint'], ['电影片名', '#32273c', '#f4eee3', 'cinema'], ['CD 封套', '#9cc7df', '#f2fbff', 'cd'], ['涂鸦贴纸', '#ff4d98', '#fff0f7', 'sticker'],
-  ['法式画报', '#813447', '#fff3ef', 'editorial'], ['档案索引卡', '#7a9b73', '#f5f3dc', 'archive'], ['旅行登机牌', '#3890a3', '#edfbfb', 'boarding'], ['漫画分镜', '#111', '#fff5b0', 'comic'], ['银盐暗房', '#bdbdbd', '#161616', 'darkroom']
+  ['社交动态-白', '#ffffff', '#ffffff', 'feed'], ['社交动态-粉', '#f5a6b5', '#ffffff', 'feed'], ['社交动态-青', '#55bcc8', '#ffffff', 'feed'], ['社交动态-蓝', '#638ac6', '#ffffff', 'feed'], ['社交动态-黄', '#ffd20a', '#ffffff', 'feed'],
+  ['朋友圈-浅色', '#f7f7f7', '#ffffff', 'moments'], ['朋友圈-暗色', '#22272b', '#ffffff', 'moments'], ['朋友圈-薄荷', '#afe3d1', '#ffffff', 'moments'], ['朋友圈-晴蓝', '#78c5d4', '#ffffff', 'moments'], ['微博正文', '#dddddd', '#ffffff', 'weibo'],
+  ['纪念卡-蓝', '#244982', '#f7f3e8', 'anniversary'], ['纪念卡-紫', '#9a5f9f', '#f7f3e8', 'anniversary'], ['纪念卡-绿', '#356b3b', '#f7f3e8', 'anniversary'], ['纪念卡-红', '#b33131', '#f7f3e8', 'anniversary'], ['旅行票根', '#3f6f7b', '#dfeaf0', 'ticket'],
+  ['旅行票根-赤', '#a43b17', '#efd5c3', 'ticket'], ['旅行票根-金', '#b99422', '#e8d7a5', 'ticket'], ['35mm 电影胶片', '#111111', '#f9f9f9', 'film'], ['负片相机框', '#1f2423', '#ffffff', 'film'], ['皱褶白相纸', '#e8e8e4', '#ffffff', 'paper']
 ];
 let pendingImageExport = null;
 let selectedFrameIndex = 0;
@@ -471,7 +471,150 @@ function openFramePicker(url, kind) { if (!url) return showToast('请先生成�
 $('#frameGrid').addEventListener('click', event => { const button = event.target.closest('[data-frame-index]'); if (!button) return; selectedFrameIndex = Number(button.dataset.frameIndex); renderFrameOptions(); });
 $('#closeFrameDialog').addEventListener('click', () => $('#frameDialog').close());
 function loadExportImage(url) { return new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = () => reject(new Error('图片读取失败')); image.src = url; }); }
-async function addFrameToImage(url, frame, preview = false) { const source = await loadExportImage(url); const scale = preview ? Math.min(1, 520 / Math.max(source.naturalWidth, source.naturalHeight)) : 1; const iw = Math.round(source.naturalWidth * scale), ih = Math.round(source.naturalHeight * scale); const [name, color, fill, type] = frame; const pad = Math.round(Math.min(iw, ih) * .105); const footer = ['polaroid', 'magazine', 'cinema', 'editorial', 'boarding'].includes(type) ? Math.round(pad * 1.15) : 0; const canvas = document.createElement('canvas'); canvas.width = iw + pad * 2; canvas.height = ih + pad * 2 + footer; const c = canvas.getContext('2d'); c.fillStyle = fill; c.fillRect(0, 0, canvas.width, canvas.height); c.drawImage(source, pad, pad, iw, ih); c.strokeStyle = color; c.lineWidth = Math.max(5, Math.round(pad * .07)); c.strokeRect(Math.round(c.lineWidth / 2), Math.round(c.lineWidth / 2), canvas.width - c.lineWidth, canvas.height - c.lineWidth); if (type === 'film' || type === 'contact') { c.fillStyle = color; for (let y = pad; y < ih + pad; y += Math.max(16, Math.round(pad*.42))) { c.fillRect(Math.round(pad*.25), y, Math.round(pad*.34), Math.round(pad*.2)); c.fillRect(canvas.width-Math.round(pad*.59), y, Math.round(pad*.34), Math.round(pad*.2)); } } if (type === 'tape' || type === 'sticker' || type === 'torn') { c.globalAlpha=.7; c.fillStyle=type==='tape'?'#ffd56c':'#fff'; c.fillRect(pad*.35, pad*.35, pad*1.15, pad*.32); c.fillRect(canvas.width-pad*1.5, canvas.height-pad*.67-footer, pad*1.15, pad*.32); c.globalAlpha=1; } if (type === 'ticket' || type === 'boarding') { c.setLineDash([Math.max(5,pad*.12), Math.max(4,pad*.08)]); c.beginPath(); c.moveTo(pad*.45, canvas.height-pad*.5); c.lineTo(canvas.width-pad*.45, canvas.height-pad*.5); c.stroke(); c.setLineDash([]); } if (type === 'postcard' || type === 'archive') { c.strokeStyle=color; c.lineWidth=2; for(let y=pad*.45;y<canvas.height-pad*.25;y+=Math.max(13,pad*.2)){c.beginPath();c.moveTo(canvas.width-pad*.9,y);c.lineTo(canvas.width-pad*.35,y);c.stroke();} } const fs=Math.max(12,Math.round(pad*.28)); c.fillStyle=color; c.font=`italic 700 ${fs}px cursive`; c.textAlign='right'; c.fillText('Prompt Pop!', canvas.width-pad*.42, canvas.height-pad*.42); c.font=`600 ${Math.max(8,Math.round(fs*.48))}px sans-serif`; c.fillText(name.toUpperCase(), canvas.width-pad*.42, canvas.height-pad*.18); return canvas.toDataURL('image/png'); }
+async function addFrameToImage(url, frame, preview = false) {
+  const source = await loadExportImage(url);
+  const scale = preview ? Math.min(1, 520 / Math.max(source.naturalWidth, source.naturalHeight)) : 1;
+  const iw = Math.round(source.naturalWidth * scale);
+  const ih = Math.round(source.naturalHeight * scale);
+  const [name, color, fill, type] = frame;
+  const p = Math.max(26, Math.round(Math.min(iw, ih) * .08));
+  const social = ['feed', 'moments', 'weibo'].includes(type);
+  const isFeed = type === 'feed';
+  const isMoments = type === 'moments';
+  const isWeibo = type === 'weibo';
+  const top = social ? Math.round(p * 1.42) : p;
+  const bottom = social ? Math.round(p * 2.18) : p;
+  const canvas = document.createElement('canvas');
+  canvas.width = iw + p * 2;
+  canvas.height = ih + top + bottom;
+  const c = canvas.getContext('2d');
+  const dark = color === '#ffffff' || color === '#f7f7f7' || color === '#dddddd';
+  const ink = dark ? '#202124' : '#ffffff';
+  const small = Math.max(9, Math.round(p * .15));
+  const body = Math.max(11, Math.round(p * .2));
+  const title = Math.max(13, Math.round(p * .25));
+
+  c.fillStyle = fill;
+  c.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (social) {
+    c.fillStyle = isWeibo ? '#f8f8f8' : fill;
+    c.fillRect(0, 0, canvas.width, canvas.height);
+    c.fillStyle = color;
+    c.fillRect(0, 0, canvas.width, Math.round(p * .55));
+    c.fillStyle = ink;
+    c.font = `700 ${title}px sans-serif`;
+    c.textAlign = 'center';
+    c.fillText(isMoments ? '‹ 朋友圈' : isWeibo ? '‹ 微博正文' : 'HAPPINESS', canvas.width / 2, Math.round(p * .37));
+    c.font = `${body}px sans-serif`;
+    c.textAlign = 'right';
+    c.fillText(isMoments || isWeibo ? '···' : '⌁', canvas.width - p * .38, Math.round(p * .36));
+
+    c.fillStyle = color;
+    c.globalAlpha = .18;
+    c.beginPath();
+    c.arc(p * 1.25, Math.round(p * .92), Math.round(p * .33), 0, Math.PI * 2);
+    c.fill();
+    c.globalAlpha = 1;
+    c.strokeStyle = color;
+    c.lineWidth = Math.max(2, Math.round(p * .05));
+    c.beginPath();
+    c.arc(p * 1.25, Math.round(p * .92), Math.round(p * .32), 0, Math.PI * 2);
+    c.stroke();
+    c.fillStyle = '#222';
+    c.textAlign = 'left';
+    c.font = `700 ${body}px sans-serif`;
+    c.fillText(isWeibo ? 'BLESSING' : 'lovely', p * 1.8, Math.round(p * .87));
+    c.fillStyle = '#777';
+    c.font = `${small}px sans-serif`;
+    c.fillText(isMoments ? '记录这一刻的美好' : 'A beautiful future', p * 1.8, Math.round(p * 1.1));
+
+    c.drawImage(source, p, top, iw, ih);
+    const y = top + ih + Math.round(p * .42);
+    c.textAlign = 'left';
+    c.font = `${Math.max(17, Math.round(p * .34))}px sans-serif`;
+    c.fillStyle = isMoments ? '#4c9b61' : '#e64052';
+    c.fillText(isMoments ? '♡' : '♥', p, y);
+    c.fillStyle = '#222';
+    c.fillText('◯  △', p * 1.55, y);
+    c.textAlign = 'right';
+    c.fillText('⌑', canvas.width - p, y);
+    c.textAlign = 'left';
+    c.font = `700 ${body}px sans-serif`;
+    c.fillStyle = '#303030';
+    c.fillText(isWeibo ? '♥ 520 a wonderful day' : '♥ 5.20 likes', p, y + Math.round(p * .32));
+    c.font = `${small}px sans-serif`;
+    c.fillStyle = '#777';
+    c.fillText(isMoments ? '10 minutes ago · 分享生活' : '10 MINUTES AGO   #wonderfulday', p, y + Math.round(p * .59));
+    c.fillStyle = color;
+    c.fillRect(0, canvas.height - Math.round(p * .34), canvas.width, Math.round(p * .34));
+    if (isFeed) {
+      c.fillStyle = ink;
+      c.font = `700 ${Math.max(12, Math.round(p * .22))}px sans-serif`;
+      c.textAlign = 'center';
+      c.fillText('⌂     ◯     ▣     ♡     ♙', canvas.width / 2, canvas.height - Math.round(p * .1));
+    }
+  } else {
+    c.drawImage(source, p, p, iw, ih);
+    c.strokeStyle = color;
+    c.lineWidth = Math.max(4, Math.round(p * .07));
+    c.strokeRect(Math.round(c.lineWidth / 2), Math.round(c.lineWidth / 2), canvas.width - c.lineWidth, canvas.height - c.lineWidth);
+
+    if (type === 'film') {
+      c.fillStyle = color;
+      const holeH = Math.max(14, Math.round(p * .42));
+      const holeW = Math.max(9, Math.round(p * .28));
+      for (let y = p; y < ih + p; y += Math.round(holeH * 1.7)) {
+        c.fillRect(Math.round(p * .22), y, holeW, holeH);
+        c.fillRect(canvas.width - Math.round(p * .22) - holeW, y, holeW, holeH);
+      }
+      c.fillStyle = fill;
+      c.font = `700 ${small}px monospace`;
+      c.textAlign = 'left';
+      c.fillText('35MM  ISO 400  24 EXP', p * .65, Math.round(p * .55));
+      c.textAlign = 'right';
+      c.fillText('PROMPT POP', canvas.width - p * .65, canvas.height - Math.round(p * .35));
+    } else if (type === 'ticket') {
+      const split = canvas.height - Math.round(p * .74);
+      c.setLineDash([Math.max(5, p * .15), Math.max(3, p * .1)]);
+      c.beginPath();
+      c.moveTo(p * .36, split);
+      c.lineTo(canvas.width - p * .36, split);
+      c.stroke();
+      c.setLineDash([]);
+      c.fillStyle = color;
+      c.textAlign = 'left';
+      c.font = `700 ${body}px sans-serif`;
+      c.fillText('ONE WAY TICKET', p * .52, canvas.height - Math.round(p * .42));
+      c.font = `${small}px monospace`;
+      c.fillText('NO. 87996   2026.08', p * .52, canvas.height - Math.round(p * .2));
+      c.textAlign = 'right';
+      c.fillText('||| || ||||| |||', canvas.width - p * .5, canvas.height - Math.round(p * .24));
+    } else if (type === 'anniversary') {
+      c.fillStyle = color;
+      c.textAlign = 'center';
+      c.font = `700 ${Math.max(15, Math.round(p * .3))}px serif`;
+      c.fillText('A MOMENT TO REMEMBER', canvas.width / 2, Math.round(p * .43));
+      c.font = `italic ${Math.max(11, Math.round(p * .21))}px serif`;
+      c.fillText('The best days are still ahead', canvas.width / 2, canvas.height - Math.round(p * .43));
+    } else if (type === 'paper') {
+      c.strokeStyle = '#d0d0cc';
+      c.lineWidth = Math.max(1, Math.round(p * .02));
+      c.beginPath();
+      c.moveTo(p * .22, p * .34);
+      c.quadraticCurveTo(canvas.width * .42, p * .62, canvas.width - p * .28, p * .34);
+      c.moveTo(p * .25, canvas.height - p * .33);
+      c.quadraticCurveTo(canvas.width * .6, canvas.height - p * .58, canvas.width - p * .24, canvas.height - p * .33);
+      c.stroke();
+    }
+  }
+
+  c.fillStyle = social ? ink : color;
+  c.font = `italic 700 ${Math.max(10, Math.round(p * .18))}px cursive`;
+  c.textAlign = 'right';
+  c.fillText('Prompt Pop!', canvas.width - p * .35, canvas.height - p * .3);
+  return canvas.toDataURL('image/png');
+}
 $('#exportOriginalButton').addEventListener('click', () => { const item = pendingImageExport; $('#frameDialog').close(); if (item) saveGeneratedImage(item.url, item.kind); });
 $('#exportFramedButton').addEventListener('click', async () => { const item = pendingImageExport; if (!item) return; const button = $('#exportFramedButton'); button.disabled = true; try { const framed = await addFrameToImage(item.url, framePresets[selectedFrameIndex]); $('#frameDialog').close(); await saveGeneratedImage(framed, `${item.kind}-frame`); } catch (error) { showToast(`相框处理失败：${error.message}`); } finally { button.disabled = false; } });
 async function saveGeneratedImage(url, kind) {
