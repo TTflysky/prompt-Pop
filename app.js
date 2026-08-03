@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.28';
+const APP_VERSION = '1.2.29';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -388,23 +388,49 @@ $('#analyzeImageButton').addEventListener('click', analyzeImage);
 $('#copyBreakdownButton').addEventListener('click', async () => { if (!lastBreakdown) return showToast('\u8fd8\u6ca1\u6709\u53ef\u590d\u5236\u7684\u62c6\u89e3\u7ed3\u679c'); showToast(await copyText(lastBreakdown) ? '\u62c6\u89e3\u7ed3\u679c\u5df2\u590d\u5236' : '\u590d\u5236\u5931\u8d25\uff0c\u8bf7\u957f\u6309\u6587\u5b57\u590d\u5236'); });
 function getBreakdownStylePrompt() { const quick = lastBreakdown.match(/整体采用：\s*([\s\S]+)/); return (quick?.[1] || lastBreakdown.split(/FINAL STYLE PROMPT:/i).pop() || '').trim(); }
 $('#sendToTextToImageButton').addEventListener('click', () => { const prompt = getBreakdownStylePrompt(); if (!prompt) return showToast('\u8bf7\u5148\u5b8c\u6210\u62c6\u56fe'); imagePrompt.value = prompt; imageCount.textContent = `${prompt.length} \u5b57`; activatePanel('image', '#imagePrompt'); showToast('\u5df2\u5e26\u5165\u6587\u751f\u56fe'); });
-let directI2IFile = null;
+const DIRECT_I2I_MAX_REFERENCES = 6;
+let directI2IFiles = [];
+let directI2IPreviewUrls = [];
 let directI2IResultUrl = '';
-function setDirectI2IReference(file) { if (!file) return; directI2IFile = file; $('#directI2IUploadName').textContent = file.name || '已拍摄参考图'; const reader = new FileReader(); reader.onload = () => { $('#directI2IPreview').src = reader.result; $('#directI2IPreviewWrap').hidden = false; showToast('参考图已加载'); }; reader.readAsDataURL(file); }
-$('#directI2IUpload').addEventListener('change', event => setDirectI2IReference(event.target.files?.[0]));
-$('#directI2ICamera').addEventListener('change', event => setDirectI2IReference(event.target.files?.[0]));
-$('#removeDirectI2IButton').addEventListener('click', () => { directI2IFile = null; $('#directI2IUpload').value = ''; $('#directI2IUploadName').textContent = '点击选择图片，支持 PNG / JPG / WEBP'; $('#directI2IPreviewWrap').hidden = true; });
+function escapeHtml(value) { return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]); }
+function renderDirectI2IReferences() {
+  directI2IPreviewUrls.forEach(URL.revokeObjectURL); directI2IPreviewUrls = [];
+  const grid = $('#directI2IReferenceGrid');
+  if (!directI2IFiles.length) {
+    grid.innerHTML = ''; $('#directI2IPreviewWrap').hidden = true;
+    $('#directI2IUploadName').textContent = '点击添加图片，最多 6 张，按编号发送';
+    $('#directI2IReferenceStatus').textContent = '图片只按编号排列；图 1、图 2 的用途由你在提示词中自由说明。';
+    return;
+  }
+  grid.innerHTML = directI2IFiles.map((file, index) => {
+    const previewUrl = URL.createObjectURL(file); directI2IPreviewUrls.push(previewUrl);
+    return `<div class="reference-image-card"><img src="${previewUrl}" alt="参考图 ${index + 1}" /><span class="reference-image-number">${index + 1}</span><button class="reference-image-remove" data-direct-i2i-remove="${index}" type="button" aria-label="移除参考图 ${index + 1}">×</button><span class="reference-image-name">${escapeHtml(file.name || `参考图 ${index + 1}`)}</span></div>`;
+  }).join('');
+  $('#directI2IPreviewWrap').hidden = false;
+  $('#directI2IUploadName').textContent = `已添加 ${directI2IFiles.length} 张参考图，可继续添加`;
+  $('#directI2IReferenceStatus').textContent = `将按图 1 - 图 ${directI2IFiles.length} 的编号顺序发送；每张图的用途由你的提示词决定。`;
+}
+function addDirectI2IReferences(files) {
+  const incoming = [...(files || [])].filter(file => file.type.startsWith('image/'));
+  const known = new Set(directI2IFiles.map(file => `${file.name}-${file.size}-${file.lastModified}`));
+  const allowed = incoming.filter(file => !known.has(`${file.name}-${file.size}-${file.lastModified}`)).slice(0, DIRECT_I2I_MAX_REFERENCES - directI2IFiles.length);
+  if (!allowed.length) return showToast(directI2IFiles.length >= DIRECT_I2I_MAX_REFERENCES ? '最多添加 6 张参考图' : '没有可添加的新图片');
+  directI2IFiles.push(...allowed); renderDirectI2IReferences(); showToast(`已添加 ${allowed.length} 张参考图`);
+}
+$('#directI2IUpload').addEventListener('change', event => { addDirectI2IReferences(event.target.files); event.target.value = ''; });
+$('#directI2ICamera').addEventListener('change', event => { addDirectI2IReferences(event.target.files); event.target.value = ''; });
+$('#directI2IReferenceGrid').addEventListener('click', event => { const button = event.target.closest('[data-direct-i2i-remove]'); if (!button) return; directI2IFiles.splice(Number(button.dataset.directI2iRemove), 1); renderDirectI2IReferences(); showToast('已移除参考图'); });
 $('#directI2IPoseStrength').addEventListener('input', event => { $('#directI2IPoseStrengthValue').textContent = `${event.target.value}%`; });
 $('#directI2IStrength').addEventListener('input', event => { $('#directI2IStrengthValue').textContent = `${event.target.value}%`; });
 async function generateDirectI2I() {
   const prompt = $('#directI2IPrompt').value.trim(); const config = getConfigs().image;
-  if (!directI2IFile) return showToast('\u8bf7\u5148\u4e0a\u4f20\u53c2\u8003\u56fe');
+  if (!directI2IFiles.length) return showToast('\u8bf7\u5148\u6dfb\u52a0\u81f3\u5c11\u4e00\u5f20\u53c2\u8003\u56fe');
   if (!prompt) return showToast('\u8bf7\u8f93\u5165\u56fe\u751f\u56fe\u63d0\u793a\u8bcd');
   if (!config.apiKey || !config.baseUrl || !config.model) { settingsDialog.showModal(); showToast('\u8bf7\u5148\u914d\u7f6e\u751f\u56fe\u6a21\u578b'); return; }
   const button = $('#generateDirectI2IButton'); directI2IResultUrl = ''; $('#saveDirectI2IButton').disabled = true; button.disabled = true; button.innerHTML = '\u2026 <span>\u56fe\u751f\u56fe\u4e2d</span>';
   try {
-    const fullPrompt = buildI2IPrompt(prompt, $('#directI2IStyle').value, $('#directI2IPoseStrength').value, $('#directI2IStrength').value, $('#directI2INegative').value);
-    const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); form.append('size', $('#directI2ISize').value); form.append('image', directI2IFile, directI2IFile.name); appendImageReferenceFidelity(form, config, config.model);
+    const fullPrompt = `${buildI2IPrompt(prompt, $('#directI2IStyle').value, $('#directI2IPoseStrength').value, $('#directI2IStrength').value, $('#directI2INegative').value)} ${directI2IFiles.length > 1 ? `Multiple numbered reference images are attached. Their roles are defined entirely by the user's prompt. Follow the explicit references to image 1, image 2, and so on; do not assume that any image is a person, subject, style, or composition anchor.` : ''}`.trim();
+    const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); form.append('size', $('#directI2ISize').value); directI2IFiles.forEach(file => form.append('image', file, file.name)); appendImageReferenceFidelity(form, config, config.model);
     const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/images/edits`, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     if (!response.ok) { const detail = await response.text(); throw new Error(`HTTP ${response.status} ${detail.slice(0, 180)}`); }
     const image = (await response.json()).data?.[0]; directI2IResultUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || ''; if (!directI2IResultUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247'); $('#directI2IOutput').innerHTML = `<img src="${directI2IResultUrl}" alt="图生图结果" />`; $('#saveDirectI2IButton').disabled = false; showToast('\u56fe\u751f\u56fe\u5b8c\u6210');
@@ -464,7 +490,7 @@ const framePresets = [
 ];
 let pendingImageExport = null;
 let selectedFrameIndex = 0;
-async function updateFramePreview() { const [name] = framePresets[selectedFrameIndex]; $('#framePreviewTitle').textContent = name; if (!pendingImageExport) return; const token = `${selectedFrameIndex}-${Date.now()}`; $('#framePreviewImage').dataset.token = token; try { const preview = await addFrameToImage(pendingImageExport.url, framePresets[selectedFrameIndex], true); if ($('#framePreviewImage').dataset.token === token) $('#framePreviewImage').src = preview; } catch { $('#framePreviewImage').src = pendingImageExport.url; } }
+async function updateFramePreview() { const [name] = framePresets[selectedFrameIndex]; $('#framePreviewTitle').textContent = name; if (!pendingImageExport) return; const token = `${selectedFrameIndex}-${Date.now()}`; $('#framePreviewImage').dataset.token = token; try { const preview = await addFrameToImageExact(pendingImageExport.url, framePresets[selectedFrameIndex], true); if ($('#framePreviewImage').dataset.token === token) $('#framePreviewImage').src = preview; } catch { $('#framePreviewImage').src = pendingImageExport.url; } }
 function renderFrameOptions() { $('#frameGrid').innerHTML = framePresets.map(([name, color, fill], index) => `<button class="frame-option ${index === selectedFrameIndex ? 'active' : ''}" data-frame-index="${index}" type="button"><span class="frame-swatch" style="--frame-color:${color};--frame-fill:${fill};--frame-size:14px"></span>${name}</button>`).join(''); updateFramePreview(); }
 function openFramePicker(url, kind) { if (!url) return showToast('请先生成图片'); pendingImageExport = { url, kind }; selectedFrameIndex = 0; $('#framePreviewImage').src = url; renderFrameOptions(); $('#frameDialog').showModal(); }
 $('#frameGrid').addEventListener('click', event => { const button = event.target.closest('[data-frame-index]'); if (!button) return; selectedFrameIndex = Number(button.dataset.frameIndex); renderFrameOptions(); });
@@ -561,8 +587,59 @@ async function addFrameToImage(url, frame, preview = false) {
 
   return canvas.toDataURL('image/png');
 }
+async function addFrameToImageExact(url, frame, preview = false) {
+  const source = await loadExportImage(url);
+  const [name, color, fill, type] = frame;
+  const W = 280, H = 389;
+  const outputWidth = preview ? 360 : Math.max(900, source.naturalWidth);
+  const scale = outputWidth / W;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(W * scale); canvas.height = Math.round(H * scale);
+  const c = canvas.getContext('2d'); c.scale(scale, scale);
+  const drawCover = (x, y, w, h) => {
+    const cover = Math.max(w / source.naturalWidth, h / source.naturalHeight);
+    const drawW = source.naturalWidth * cover, drawH = source.naturalHeight * cover;
+    c.drawImage(source, x + (w - drawW) / 2, y + (h - drawH) / 2, drawW, drawH);
+  };
+  const text = (value, x, y, font, fillStyle = color, align = 'left') => { c.fillStyle = fillStyle; c.font = font; c.textAlign = align; c.fillText(value, x, y); };
+  const line = (x1, y1, x2, y2, stroke = color, width = 1) => { c.strokeStyle = stroke; c.lineWidth = width; c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); };
+
+  c.fillStyle = fill; c.fillRect(0, 0, W, H);
+  if (type === 'editorial') {
+    drawCover(13, 42, 254, 299); text('PORTRAIT', 13, 33, '700 23px Georgia, serif', '#1d1d1d'); text('STORIES IN COLOR', 13, 45, '10px Arial', '#1d1d1d'); text('VOL. 08 / 2026', 267, 374, '700 11px Arial', '#1d1d1d', 'right');
+  } else if (type === 'date') {
+    c.strokeStyle = '#b4afa5'; c.lineWidth = 1; c.strokeRect(.5, .5, W - 1, H - 1); drawCover(11, 11, 258, 367);
+    c.strokeStyle = '#202020'; c.lineWidth = 2;
+    [[18,18,1,1],[262,18,-1,1],[18,371,1,-1],[262,371,-1,-1]].forEach(([x,y,dx,dy]) => { c.beginPath(); c.moveTo(x, y + dy * 46); c.lineTo(x, y); c.lineTo(x + dx * 46, y); c.stroke(); });
+    text('08.03', 261, 354, '700 19px Georgia, serif', '#fff', 'right');
+  } else if (type === 'contact') {
+    c.fillStyle = '#101010'; c.fillRect(0, 0, W, H); drawCover(24, 19, 232, 351);
+    c.fillStyle = '#e9e5db'; for (let y = 12; y < 377; y += 28) { c.fillRect(6, y, 12, 15); c.fillRect(262, y, 12, 15); }
+    text('35MM / ISO 400 / PROMPT POP', 24, 383, '9px monospace', '#fff');
+  } else if (type === 'postcard') {
+    drawCover(17, 17, 246, 304); c.strokeStyle = '#c8bca3'; c.lineWidth = 1; c.strokeRect(17.5, 17.5, 245, 303); line(17, 342, 263, 342, '#bdb29f'); text('Wish you were here', 18, 369, 'italic 13px Georgia, serif', '#806e58');
+    c.strokeStyle = '#b54e42'; c.lineWidth = 2; c.setLineDash([4, 3]); c.strokeRect(224, 330, 36, 42); c.setLineDash([]); text('AIR', 242, 348, '700 8px Arial', '#b54e42', 'center'); text('MAIL', 242, 358, '700 8px Arial', '#b54e42', 'center');
+  } else if (type === 'ticket') {
+    text('PROMPT POP EXPRESS', 14, 21, '700 10px Arial', color); text('ONE WAY', 14, 44, '700 24px Georgia, serif', color); c.strokeStyle = color; c.setLineDash([5, 4]); line(14, 56, 266, 56, color); line(14, 338, 266, 338, color); c.setLineDash([]); drawCover(14, 70, 252, 268); text('NO. 87996 / 2026.08 / SEAT 08A', 14, 370, '9px monospace', color);
+  } else if (type === 'museum') {
+    c.strokeStyle = '#191919'; c.lineWidth = 7; c.strokeRect(3.5, 3.5, 273, 382); drawCover(20, 20, 240, 285); line(20, 326, 260, 326, '#222'); text('UNTITLED, 2026', 20, 347, '700 10px Arial', '#222'); text('Digital print / Prompt Pop archive', 20, 362, '10px Arial', '#666');
+  } else if (type === 'music') {
+    c.fillStyle = '#3f55a8'; c.fillRect(0, 0, W, H); text('PROMPT POP / SIDE A', 17, 29, '700 12px Arial', '#fff'); drawCover(17, 52, 246, 269); c.strokeStyle = '#f9ce44'; c.lineWidth = 5; c.strokeRect(17, 52, 246, 269); text('LOUD', 17, 350, '700 28px Georgia, serif', '#fff'); text('MEMORY', 17, 373, '700 28px Georgia, serif', '#fff'); text('A SUNDAY IN AUGUST', 17, 385, '10px Arial', '#fff');
+  } else if (type === 'newspaper') {
+    c.strokeStyle = '#8d877c'; c.lineWidth = 1; c.strokeRect(.5, .5, W - 1, H - 1); text('THE DAILY IMAGE', 140, 27, '700 20px Georgia, serif', '#1d1d1d', 'center'); c.strokeStyle = '#1d1d1d'; c.lineWidth = 1; c.beginPath(); c.moveTo(13, 40); c.lineTo(267, 40); c.stroke(); c.lineWidth = 1; c.beginPath(); c.moveTo(13, 44); c.lineTo(267, 44); c.stroke(); drawCover(13, 62, 254, 261); text('A SMALL MOMENT, A BIG STORY', 13, 348, '700 15px Georgia, serif', '#1d1d1d'); text('Photography, memory and the quiet color of an ordinary day.', 13, 367, '9px Arial', '#4f4b43');
+  } else if (type === 'scrapbook') {
+    c.fillStyle = '#f8d7df'; c.fillRect(0, 0, W, H); c.save(); c.translate(236, 27); c.rotate(.16); c.globalAlpha = .8; c.fillStyle = '#7ad6cb'; c.fillRect(-40, -9, 80, 18); c.restore(); c.save(); c.translate(140, 194); c.rotate(-.017); drawCover(-118, -151, 236, 303); c.strokeStyle = '#fffdf8'; c.lineWidth = 9; c.strokeRect(-118, -151, 236, 303); c.strokeStyle = '#b94c72'; c.lineWidth = 2; c.strokeRect(-115, -148, 236, 303); c.restore(); text('good day!', 19, 370, '700 22px Georgia, serif', '#b52f60');
+  } else if (type === 'passport') {
+    c.fillStyle = '#2b5161'; c.fillRect(0, 0, W, H); c.strokeStyle = '#e3d39e'; c.lineWidth = 1; c.strokeRect(17, 63, 246, 272); c.beginPath(); c.arc(33, 34, 15, 0, Math.PI * 2); c.lineWidth = 2; c.stroke(); text('PP', 33, 38, '700 10px Arial', '#e3d39e', 'center'); text('THE JOURNEY', 60, 31, '700 15px Georgia, serif', '#e3d39e'); text('MEMORY PASSPORT', 60, 43, '8px Arial', '#e3d39e'); drawCover(17, 63, 246, 272); c.strokeStyle = '#e3d39e'; c.lineWidth = 1; c.strokeRect(17, 63, 246, 272); text('PPOP 2026 0803 001', 17, 369, '10px monospace', '#e3d39e');
+  } else if (type === 'memory') {
+    c.strokeStyle = '#a44e45'; c.lineWidth = 9; c.strokeRect(4.5, 4.5, 271, 380); text('MOMENT / 08', 19, 33, '700 14px Georgia, serif', '#a44e45'); drawCover(17, 17, 246, 300); text('This is how we remember.', 140, 369, 'italic 15px Georgia, serif', '#a44e45', 'center');
+  } else if (type === 'minimal') {
+    drawCover(24, 24, 232, 277); line(24, 322, 256, 322, '#222'); text('PROMPT POP ARCHIVE / 2026', 24, 343, '700 12px Arial', '#1d1d1d'); text('Keep the image. Keep the feeling.', 24, 364, '10px Georgia, serif', '#777');
+  }
+  return canvas.toDataURL('image/png');
+}
 $('#exportOriginalButton').addEventListener('click', () => { const item = pendingImageExport; $('#frameDialog').close(); if (item) saveGeneratedImage(item.url, item.kind); });
-$('#exportFramedButton').addEventListener('click', async () => { const item = pendingImageExport; if (!item) return; const button = $('#exportFramedButton'); button.disabled = true; try { const framed = await addFrameToImage(item.url, framePresets[selectedFrameIndex]); $('#frameDialog').close(); await saveGeneratedImage(framed, `${item.kind}-frame`); } catch (error) { showToast(`相框处理失败：${error.message}`); } finally { button.disabled = false; } });
+$('#exportFramedButton').addEventListener('click', async () => { const item = pendingImageExport; if (!item) return; const button = $('#exportFramedButton'); button.disabled = true; try { const framed = await addFrameToImageExact(item.url, framePresets[selectedFrameIndex]); $('#frameDialog').close(); await saveGeneratedImage(framed, `${item.kind}-frame`); } catch (error) { showToast(`相框处理失败：${error.message}`); } finally { button.disabled = false; } });
 async function saveGeneratedImage(url, kind) {
   if (!url) return showToast('请先生成图片');
   const filename = makeImageFilename(kind);
