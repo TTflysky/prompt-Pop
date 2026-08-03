@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.PowerManager;
 
 /** Keeps in-flight API work alive while the app is backgrounded. */
 public class GenerationService extends Service {
@@ -15,6 +16,7 @@ public class GenerationService extends Service {
     private static final int NOTIFICATION_ID = 1208;
     private static int activeRequests = 0;
     private static GenerationService runningService;
+    private PowerManager.WakeLock wakeLock;
 
     public static synchronized void begin(Context context) {
         activeRequests++;
@@ -42,6 +44,11 @@ public class GenerationService extends Service {
         }
         createChannel();
         startForeground(NOTIFICATION_ID, createNotification());
+        PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
+        if (powerManager != null) {
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PromptPop:Generation");
+            wakeLock.acquire(10 * 60 * 1000L);
+        }
         synchronized (GenerationService.class) {
             if (activeRequests == 0) {
                 stopForeground(STOP_FOREGROUND_REMOVE);
@@ -59,6 +66,7 @@ public class GenerationService extends Service {
 
     @Override
     public void onDestroy() {
+        if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         synchronized (GenerationService.class) {
             if (runningService == this) runningService = null;
         }
