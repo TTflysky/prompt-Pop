@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.27';
+const APP_VERSION = '1.2.28';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -458,10 +458,9 @@ function buildI2IPrompt(prompt, style, poseStrength, styleStrength, negative) {
 }
 function makeImageFilename(kind) { return `prompt-pop-${kind}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`; }
 const framePresets = [
-  ['社交动态-白', '#ffffff', '#ffffff', 'feed'], ['社交动态-粉', '#f5a6b5', '#ffffff', 'feed'], ['社交动态-青', '#55bcc8', '#ffffff', 'feed'], ['社交动态-蓝', '#638ac6', '#ffffff', 'feed'], ['社交动态-黄', '#ffd20a', '#ffffff', 'feed'],
-  ['朋友圈-浅色', '#f7f7f7', '#ffffff', 'moments'], ['朋友圈-暗色', '#22272b', '#ffffff', 'moments'], ['朋友圈-薄荷', '#afe3d1', '#ffffff', 'moments'], ['朋友圈-晴蓝', '#78c5d4', '#ffffff', 'moments'], ['微博正文', '#dddddd', '#ffffff', 'weibo'],
-  ['纪念卡-蓝', '#244982', '#f7f3e8', 'anniversary'], ['纪念卡-紫', '#9a5f9f', '#f7f3e8', 'anniversary'], ['纪念卡-绿', '#356b3b', '#f7f3e8', 'anniversary'], ['纪念卡-红', '#b33131', '#f7f3e8', 'anniversary'], ['旅行票根', '#3f6f7b', '#dfeaf0', 'ticket'],
-  ['旅行票根-赤', '#a43b17', '#efd5c3', 'ticket'], ['旅行票根-金', '#b99422', '#e8d7a5', 'ticket'], ['35mm 电影胶片', '#111111', '#f9f9f9', 'film'], ['负片相机框', '#1f2423', '#ffffff', 'film'], ['皱褶白相纸', '#e8e8e4', '#ffffff', 'paper']
+  ['画册封面', '#1d1d1d', '#ece6d9', 'editorial'], ['日期印记', '#1d1d1d', '#f8f5ee', 'date'], ['接触印样', '#111111', '#111111', 'contact'], ['旅行明信片', '#806e58', '#f9f3e5', 'postcard'],
+  ['旅行票根', '#2c5d69', '#edd7ba', 'ticket'], ['画廊藏品卡', '#1a1a1a', '#fbfaf5', 'museum'], ['音乐封套', '#ffffff', '#3f55a8', 'music'], ['报纸头版', '#1d1d1d', '#e7e0d0', 'newspaper'],
+  ['拼贴手账', '#b52f60', '#f8d7df', 'scrapbook'], ['护照档案', '#e3d39e', '#2b5161', 'passport'], ['纪念相卡', '#a44e45', '#f2e8d8', 'memory'], ['极简摄影书', '#1d1d1d', '#ffffff', 'minimal']
 ];
 let pendingImageExport = null;
 let selectedFrameIndex = 0;
@@ -478,141 +477,88 @@ async function addFrameToImage(url, frame, preview = false) {
   const ih = Math.round(source.naturalHeight * scale);
   const [name, color, fill, type] = frame;
   const p = Math.max(26, Math.round(Math.min(iw, ih) * .08));
-  const social = ['feed', 'moments', 'weibo'].includes(type);
-  const isFeed = type === 'feed';
-  const isMoments = type === 'moments';
-  const isWeibo = type === 'weibo';
-  const top = social ? Math.round(p * 1.42) : p;
-  const bottom = social ? Math.round(p * 2.18) : p;
+  const top = ['editorial', 'ticket', 'music', 'newspaper', 'passport', 'memory'].includes(type) ? Math.round(p * 1.42) : p;
+  const bottom = ['editorial', 'postcard', 'ticket', 'museum', 'music', 'newspaper', 'memory', 'minimal', 'passport'].includes(type) ? Math.round(p * 1.68) : p;
   const canvas = document.createElement('canvas');
   canvas.width = iw + p * 2;
   canvas.height = ih + top + bottom;
   const c = canvas.getContext('2d');
-  const dark = color === '#ffffff' || color === '#f7f7f7' || color === '#dddddd';
-  const ink = dark ? '#202124' : '#ffffff';
   const small = Math.max(9, Math.round(p * .15));
   const body = Math.max(11, Math.round(p * .2));
-  const title = Math.max(13, Math.round(p * .25));
+  const title = Math.max(15, Math.round(p * .29));
+  const x = p;
+  const y = top;
+  const imageW = iw;
+  const imageH = ih;
+  const footerY = y + imageH;
+  const text = (value, px, py, font, align = 'left', ink = color) => { c.fillStyle = ink; c.font = font; c.textAlign = align; c.fillText(value, px, py); };
 
   c.fillStyle = fill;
   c.fillRect(0, 0, canvas.width, canvas.height);
+  c.drawImage(source, x, y, imageW, imageH);
 
-  if (social) {
-    c.fillStyle = isWeibo ? '#f8f8f8' : fill;
-    c.fillRect(0, 0, canvas.width, canvas.height);
-    c.fillStyle = color;
-    c.fillRect(0, 0, canvas.width, Math.round(p * .55));
-    c.fillStyle = ink;
-    c.font = `700 ${title}px sans-serif`;
-    c.textAlign = 'center';
-    c.fillText(isMoments ? '‹ 朋友圈' : isWeibo ? '‹ 微博正文' : 'HAPPINESS', canvas.width / 2, Math.round(p * .37));
-    c.font = `${body}px sans-serif`;
-    c.textAlign = 'right';
-    c.fillText(isMoments || isWeibo ? '···' : '⌁', canvas.width - p * .38, Math.round(p * .36));
-
-    c.fillStyle = color;
-    c.globalAlpha = .18;
-    c.beginPath();
-    c.arc(p * 1.25, Math.round(p * .92), Math.round(p * .33), 0, Math.PI * 2);
-    c.fill();
-    c.globalAlpha = 1;
-    c.strokeStyle = color;
-    c.lineWidth = Math.max(2, Math.round(p * .05));
-    c.beginPath();
-    c.arc(p * 1.25, Math.round(p * .92), Math.round(p * .32), 0, Math.PI * 2);
-    c.stroke();
-    c.fillStyle = '#222';
-    c.textAlign = 'left';
-    c.font = `700 ${body}px sans-serif`;
-    c.fillText(isWeibo ? 'BLESSING' : 'lovely', p * 1.8, Math.round(p * .87));
-    c.fillStyle = '#777';
-    c.font = `${small}px sans-serif`;
-    c.fillText(isMoments ? '记录这一刻的美好' : 'A beautiful future', p * 1.8, Math.round(p * 1.1));
-
-    c.drawImage(source, p, top, iw, ih);
-    const y = top + ih + Math.round(p * .42);
-    c.textAlign = 'left';
-    c.font = `${Math.max(17, Math.round(p * .34))}px sans-serif`;
-    c.fillStyle = isMoments ? '#4c9b61' : '#e64052';
-    c.fillText(isMoments ? '♡' : '♥', p, y);
-    c.fillStyle = '#222';
-    c.fillText('◯  △', p * 1.55, y);
-    c.textAlign = 'right';
-    c.fillText('⌑', canvas.width - p, y);
-    c.textAlign = 'left';
-    c.font = `700 ${body}px sans-serif`;
-    c.fillStyle = '#303030';
-    c.fillText(isWeibo ? '♥ 520 a wonderful day' : '♥ 5.20 likes', p, y + Math.round(p * .32));
-    c.font = `${small}px sans-serif`;
-    c.fillStyle = '#777';
-    c.fillText(isMoments ? '10 minutes ago · 分享生活' : '10 MINUTES AGO   #wonderfulday', p, y + Math.round(p * .59));
-    c.fillStyle = color;
-    c.fillRect(0, canvas.height - Math.round(p * .34), canvas.width, Math.round(p * .34));
-    if (isFeed) {
-      c.fillStyle = ink;
-      c.font = `700 ${Math.max(12, Math.round(p * .22))}px sans-serif`;
-      c.textAlign = 'center';
-      c.fillText('⌂     ◯     ▣     ♡     ♙', canvas.width / 2, canvas.height - Math.round(p * .1));
-    }
-  } else {
-    c.drawImage(source, p, p, iw, ih);
-    c.strokeStyle = color;
-    c.lineWidth = Math.max(4, Math.round(p * .07));
-    c.strokeRect(Math.round(c.lineWidth / 2), Math.round(c.lineWidth / 2), canvas.width - c.lineWidth, canvas.height - c.lineWidth);
-
-    if (type === 'film') {
-      c.fillStyle = color;
-      const holeH = Math.max(14, Math.round(p * .42));
-      const holeW = Math.max(9, Math.round(p * .28));
-      for (let y = p; y < ih + p; y += Math.round(holeH * 1.7)) {
-        c.fillRect(Math.round(p * .22), y, holeW, holeH);
-        c.fillRect(canvas.width - Math.round(p * .22) - holeW, y, holeW, holeH);
-      }
-      c.fillStyle = fill;
-      c.font = `700 ${small}px monospace`;
-      c.textAlign = 'left';
-      c.fillText('35MM  ISO 400  24 EXP', p * .65, Math.round(p * .55));
-      c.textAlign = 'right';
-      c.fillText('PROMPT POP', canvas.width - p * .65, canvas.height - Math.round(p * .35));
-    } else if (type === 'ticket') {
-      const split = canvas.height - Math.round(p * .74);
-      c.setLineDash([Math.max(5, p * .15), Math.max(3, p * .1)]);
-      c.beginPath();
-      c.moveTo(p * .36, split);
-      c.lineTo(canvas.width - p * .36, split);
-      c.stroke();
-      c.setLineDash([]);
-      c.fillStyle = color;
-      c.textAlign = 'left';
-      c.font = `700 ${body}px sans-serif`;
-      c.fillText('ONE WAY TICKET', p * .52, canvas.height - Math.round(p * .42));
-      c.font = `${small}px monospace`;
-      c.fillText('NO. 87996   2026.08', p * .52, canvas.height - Math.round(p * .2));
-      c.textAlign = 'right';
-      c.fillText('||| || ||||| |||', canvas.width - p * .5, canvas.height - Math.round(p * .24));
-    } else if (type === 'anniversary') {
-      c.fillStyle = color;
-      c.textAlign = 'center';
-      c.font = `700 ${Math.max(15, Math.round(p * .3))}px serif`;
-      c.fillText('A MOMENT TO REMEMBER', canvas.width / 2, Math.round(p * .43));
-      c.font = `italic ${Math.max(11, Math.round(p * .21))}px serif`;
-      c.fillText('The best days are still ahead', canvas.width / 2, canvas.height - Math.round(p * .43));
-    } else if (type === 'paper') {
-      c.strokeStyle = '#d0d0cc';
-      c.lineWidth = Math.max(1, Math.round(p * .02));
-      c.beginPath();
-      c.moveTo(p * .22, p * .34);
-      c.quadraticCurveTo(canvas.width * .42, p * .62, canvas.width - p * .28, p * .34);
-      c.moveTo(p * .25, canvas.height - p * .33);
-      c.quadraticCurveTo(canvas.width * .6, canvas.height - p * .58, canvas.width - p * .24, canvas.height - p * .33);
-      c.stroke();
-    }
+  if (type === 'editorial') {
+    text('PORTRAIT', x, Math.round(p * .58), `700 ${title}px Georgia, serif`, 'left', '#1d1d1d');
+    text('STORIES IN COLOR', x, Math.round(p * .86), `${small}px sans-serif`, 'left', '#1d1d1d');
+    text('VOL. 08 / 2026', canvas.width - x, canvas.height - Math.round(p * .42), `700 ${small}px sans-serif`, 'right', '#1d1d1d');
+  } else if (type === 'date') {
+    c.strokeStyle = color; c.lineWidth = Math.max(2, Math.round(p * .04));
+    [[p*.4,p*.4,1,1], [canvas.width-p*.4,p*.4,-1,1], [p*.4,canvas.height-p*.4,1,-1], [canvas.width-p*.4,canvas.height-p*.4,-1,-1]].forEach(([cx,cy,dx,dy]) => {
+      c.beginPath(); c.moveTo(cx, cy + dy * p * .42); c.lineTo(cx, cy); c.lineTo(cx + dx * p * .42, cy); c.stroke();
+    });
+    text('08.03', canvas.width - Math.round(p * .38), footerY - Math.round(p * .25), `700 ${Math.max(17, Math.round(p * .36))}px Georgia, serif`, 'right', '#ffffff');
+  } else if (type === 'contact') {
+    c.fillStyle = '#111'; c.fillRect(0, 0, canvas.width, canvas.height); c.drawImage(source, x, y, imageW, imageH);
+    const holeH = Math.max(13, Math.round(p * .4)); const holeW = Math.max(9, Math.round(p * .27));
+    for (let holeY = Math.round(p * .5); holeY < canvas.height - p * .5; holeY += Math.round(holeH * 1.75)) { c.fillStyle = '#f2eadb'; c.fillRect(Math.round(p*.22), holeY, holeW, holeH); c.fillRect(canvas.width - Math.round(p*.22) - holeW, holeY, holeW, holeH); }
+    text('35MM / ISO 400 / PROMPT POP', x, canvas.height - Math.round(p * .3), `700 ${small}px monospace`, 'left', '#ffffff');
+  } else if (type === 'postcard') {
+    c.strokeStyle = '#c8bca3'; c.lineWidth = 1; c.strokeRect(x, y, imageW, imageH);
+    c.strokeStyle = '#bdb29f'; c.beginPath(); c.moveTo(x, footerY + Math.round(p*.57)); c.lineTo(canvas.width - x, footerY + Math.round(p*.57)); c.stroke();
+    text('Wish you were here', x, canvas.height - Math.round(p * .4), `italic ${body}px Georgia, serif`, 'left', color);
+    c.strokeStyle = '#b54e42'; c.lineWidth = Math.max(1, Math.round(p*.035)); c.setLineDash([4,3]); c.strokeRect(canvas.width - Math.round(p*1.25), canvas.height - Math.round(p*1.05), Math.round(p*.7), Math.round(p*.78)); c.setLineDash([]);
+    text('AIR', canvas.width - Math.round(p*.9), canvas.height - Math.round(p*.66), `700 ${small}px sans-serif`, 'center', '#b54e42');
+  } else if (type === 'ticket') {
+    c.strokeStyle = color; c.setLineDash([Math.max(5,p*.15), Math.max(3,p*.1)]); c.beginPath(); c.moveTo(x, y - Math.round(p*.28)); c.lineTo(canvas.width-x, y - Math.round(p*.28)); c.moveTo(x, footerY + Math.round(p*.72)); c.lineTo(canvas.width-x, footerY + Math.round(p*.72)); c.stroke(); c.setLineDash([]);
+    text('PROMPT POP EXPRESS', x, Math.round(p*.45), `700 ${small}px sans-serif`, 'left');
+    text('ONE WAY', x, Math.round(p*.94), `700 ${title}px Georgia, serif`, 'left');
+    text('NO. 87996 / 2026.08 / SEAT 08A', x, canvas.height - Math.round(p*.35), `${small}px monospace`, 'left');
+  } else if (type === 'museum') {
+    c.strokeStyle = '#1a1a1a'; c.lineWidth = Math.max(5, Math.round(p*.09)); c.strokeRect(Math.round(c.lineWidth/2), Math.round(c.lineWidth/2), canvas.width-c.lineWidth, canvas.height-c.lineWidth);
+    c.strokeStyle = '#1a1a1a'; c.lineWidth = 1; c.beginPath(); c.moveTo(x, footerY + Math.round(p*.35)); c.lineTo(canvas.width-x, footerY + Math.round(p*.35)); c.stroke();
+    text('UNTITLED, 2026', x, canvas.height - Math.round(p*.66), `700 ${body}px sans-serif`, 'left', '#1a1a1a');
+    text('Digital print / Prompt Pop archive', x, canvas.height - Math.round(p*.36), `${small}px sans-serif`, 'left', '#666');
+  } else if (type === 'music') {
+    c.strokeStyle = '#f9ce44'; c.lineWidth = Math.max(5, Math.round(p*.09)); c.strokeRect(x - c.lineWidth/2, y - c.lineWidth/2, imageW+c.lineWidth, imageH+c.lineWidth);
+    text('PROMPT POP / SIDE A', x, Math.round(p*.48), `700 ${small}px sans-serif`, 'left', '#ffffff');
+    text('LOUD', x, canvas.height - Math.round(p*.83), `700 ${title}px Georgia, serif`, 'left', '#ffffff');
+    text('MEMORY', x, canvas.height - Math.round(p*.48), `700 ${title}px Georgia, serif`, 'left', '#ffffff');
+    text('A SUNDAY IN AUGUST', x, canvas.height - Math.round(p*.22), `${small}px sans-serif`, 'left', '#ffffff');
+  } else if (type === 'newspaper') {
+    c.strokeStyle = '#1d1d1d'; c.lineWidth = Math.max(1, Math.round(p*.025)); c.strokeRect(Math.round(p*.15), Math.round(p*.15), canvas.width-Math.round(p*.3), canvas.height-Math.round(p*.3));
+    text('THE DAILY IMAGE', canvas.width/2, Math.round(p*.55), `700 ${title}px Georgia, serif`, 'center', '#1d1d1d');
+    c.lineWidth = Math.max(1, Math.round(p*.025)); c.beginPath(); c.moveTo(x, y-Math.round(p*.25)); c.lineTo(canvas.width-x, y-Math.round(p*.25)); c.stroke();
+    text('A SMALL MOMENT, A BIG STORY', x, canvas.height - Math.round(p*.74), `700 ${body}px Georgia, serif`, 'left', '#1d1d1d');
+    text('Photography, memory and the quiet color of an ordinary day.', x, canvas.height - Math.round(p*.42), `${small}px sans-serif`, 'left', '#4f4b43');
+  } else if (type === 'scrapbook') {
+    c.save(); c.translate(canvas.width - p*.72, p*.55); c.rotate(.16); c.fillStyle = '#7ad6cb'; c.globalAlpha = .82; c.fillRect(-p*.65, -p*.1, p*1.3, p*.28); c.restore();
+    c.strokeStyle = '#fffdf8'; c.lineWidth = Math.max(7, Math.round(p*.17)); c.strokeRect(x, y, imageW, imageH); c.strokeStyle = '#b94c72'; c.lineWidth = Math.max(2, Math.round(p*.04)); c.strokeRect(x+p*.12, y+p*.12, imageW, imageH);
+    text('good day!', x, canvas.height - Math.round(p*.35), `700 ${title}px Georgia, serif`, 'left', color);
+  } else if (type === 'passport') {
+    c.strokeStyle = color; c.lineWidth = Math.max(1, Math.round(p*.03)); c.strokeRect(x, y, imageW, imageH);
+    c.beginPath(); c.arc(Math.round(p*.62), Math.round(p*.64), Math.round(p*.29), 0, Math.PI*2); c.stroke(); text('PP', Math.round(p*.62), Math.round(p*.7), `700 ${small}px sans-serif`, 'center');
+    text('THE JOURNEY', Math.round(p*1.15), Math.round(p*.57), `700 ${body}px Georgia, serif`, 'left'); text('MEMORY PASSPORT', Math.round(p*1.15), Math.round(p*.85), `${small}px sans-serif`, 'left');
+    text('PPOP 2026 0803 001', x, canvas.height - Math.round(p*.35), `${small}px monospace`, 'left');
+  } else if (type === 'memory') {
+    c.strokeStyle = color; c.lineWidth = Math.max(6, Math.round(p*.1)); c.strokeRect(Math.round(c.lineWidth/2), Math.round(c.lineWidth/2), canvas.width-c.lineWidth, canvas.height-c.lineWidth);
+    text('MOMENT / 08', x, Math.round(p*.55), `700 ${body}px Georgia, serif`, 'left');
+    text('This is how we remember.', canvas.width/2, canvas.height - Math.round(p*.4), `italic ${body}px Georgia, serif`, 'center');
+  } else if (type === 'minimal') {
+    c.strokeStyle = '#1d1d1d'; c.lineWidth = 1; c.beginPath(); c.moveTo(x, footerY + Math.round(p*.42)); c.lineTo(canvas.width-x, footerY + Math.round(p*.42)); c.stroke();
+    text('PROMPT POP ARCHIVE / 2026', x, canvas.height - Math.round(p*.68), `700 ${small}px sans-serif`, 'left', '#1d1d1d');
+    text('Keep the image. Keep the feeling.', x, canvas.height - Math.round(p*.35), `${small}px Georgia, serif`, 'left', '#777');
   }
 
-  c.fillStyle = social ? ink : color;
-  c.font = `italic 700 ${Math.max(10, Math.round(p * .18))}px cursive`;
-  c.textAlign = 'right';
-  c.fillText('Prompt Pop!', canvas.width - p * .35, canvas.height - p * .3);
   return canvas.toDataURL('image/png');
 }
 $('#exportOriginalButton').addEventListener('click', () => { const item = pendingImageExport; $('#frameDialog').close(); if (item) saveGeneratedImage(item.url, item.kind); });
