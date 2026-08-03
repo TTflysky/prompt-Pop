@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.10';
+const APP_VERSION = '1.2.11';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -263,7 +263,7 @@ async function generateImage() {
   try {
     let response;
     if (imageGenerateMode === 'image') {
-      const form = new FormData(); form.append('model', imageModel); form.append('prompt', buildI2IPrompt(imagePrompt.value, $('#imageStyle').value, $('#styleSlider').value, $('#negativePrompt').value)); form.append('size', $('#imageSize').value); form.append('image', imageFile, imageFile.name);
+      const form = new FormData(); form.append('model', imageModel); form.append('prompt', buildI2IPrompt(imagePrompt.value, $('#imageStyle').value, 20, $('#styleSlider').value, $('#negativePrompt').value)); form.append('size', $('#imageSize').value); form.append('image', imageFile, imageFile.name); appendImageReferenceFidelity(form, config, imageModel);
       response = await apiRequest(endpoint, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     } else {
       response = await apiRequest(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: imageModel, prompt: imagePrompt.value, size: $('#imageSize').value }) });
@@ -318,6 +318,7 @@ let directI2IFile = null;
 let directI2IResultUrl = '';
 $('#directI2IUpload').addEventListener('change', event => { const file = event.target.files?.[0]; if (!file) return; directI2IFile = file; $('#directI2IUploadName').textContent = file.name; const reader = new FileReader(); reader.onload = () => { $('#directI2IPreview').src = reader.result; $('#directI2IPreviewWrap').hidden = false; }; reader.readAsDataURL(file); });
 $('#removeDirectI2IButton').addEventListener('click', () => { directI2IFile = null; $('#directI2IUpload').value = ''; $('#directI2IUploadName').textContent = '点击选择图片，支持 PNG / JPG / WEBP'; $('#directI2IPreviewWrap').hidden = true; });
+$('#directI2IPoseStrength').addEventListener('input', event => { $('#directI2IPoseStrengthValue').textContent = `${event.target.value}%`; });
 $('#directI2IStrength').addEventListener('input', event => { $('#directI2IStrengthValue').textContent = `${event.target.value}%`; });
 async function generateDirectI2I() {
   const prompt = $('#directI2IPrompt').value.trim(); const config = getConfigs().image;
@@ -326,8 +327,8 @@ async function generateDirectI2I() {
   if (!config.apiKey || !config.baseUrl || !config.model) { settingsDialog.showModal(); showToast('\u8bf7\u5148\u914d\u7f6e\u751f\u56fe\u6a21\u578b'); return; }
   const button = $('#generateDirectI2IButton'); directI2IResultUrl = ''; $('#saveDirectI2IButton').disabled = true; button.disabled = true; button.innerHTML = '\u2026 <span>\u56fe\u751f\u56fe\u4e2d</span>';
   try {
-    const fullPrompt = buildI2IPrompt(prompt, $('#directI2IStyle').value, $('#directI2IStrength').value, $('#directI2INegative').value);
-    const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); form.append('size', $('#directI2ISize').value); form.append('image', directI2IFile, directI2IFile.name);
+    const fullPrompt = buildI2IPrompt(prompt, $('#directI2IStyle').value, $('#directI2IPoseStrength').value, $('#directI2IStrength').value, $('#directI2INegative').value);
+    const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); form.append('size', $('#directI2ISize').value); form.append('image', directI2IFile, directI2IFile.name); appendImageReferenceFidelity(form, config, config.model);
     const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/images/edits`, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     if (!response.ok) { const detail = await response.text(); throw new Error(`HTTP ${response.status} ${detail.slice(0, 180)}`); }
     const image = (await response.json()).data?.[0]; directI2IResultUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || ''; if (!directI2IResultUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247'); $('#directI2IOutput').innerHTML = `<img src="${directI2IResultUrl}" alt="图生图结果" />`; $('#saveDirectI2IButton').disabled = false; showToast('\u56fe\u751f\u56fe\u5b8c\u6210');
@@ -335,7 +336,33 @@ async function generateDirectI2I() {
   finally { button.disabled = false; button.innerHTML = '\u2301 <span>\u751f\u6210\u56fe\u751f\u56fe</span>'; }
 }
 $('#generateDirectI2IButton').addEventListener('click', generateDirectI2I);
-function buildI2IPrompt(prompt, style, strength, negative) { return [prompt, 'IMPORTANT: The user prompt has highest priority. Use the reference image only for general visual inspiration and style, not for its content.', 'Replace the original subject completely. Do not retain or recreate any original person, object, text, logo, sign, setting, composition, pose, identity, or recognizable detail from the reference.', `Target visual direction: ${style}. Transformation strength: ${strength}% (higher means more change from the reference).`, negative ? `Avoid: ${negative}.` : ''].filter(Boolean).join('\n'); }
+function appendImageReferenceFidelity(form, config, model) {
+  if (config.provider === 'openai' && /^gpt-image-1(?:\.5)?$/i.test(model)) form.append('input_fidelity', 'high');
+}
+function buildI2IPrompt(prompt, style, poseStrength, styleStrength, negative) {
+  const styleLevel = Number(styleStrength);
+  const poseLevel = Number(poseStrength);
+  const transformation = styleLevel <= 30
+    ? 'Make only subtle refinements to lighting, color, texture, and styling.'
+    : styleLevel <= 70
+      ? 'Make clear stylistic and environmental changes while keeping the referenced person unmistakably the same.'
+      : 'Apply a bold transformation to style, clothing, background, lighting, and artistic treatment, but never replace the referenced person.';
+  const poseDirection = poseLevel <= 20
+    ? 'Keep the original pose and body posture nearly unchanged.'
+    : poseLevel <= 60
+      ? 'Allow a natural variation of the original pose and gesture while retaining the same person and body proportions.'
+      : 'Allow a distinctly new but anatomically natural pose and action for the same person; preserve their identity and body proportions.';
+  return [
+    'REFERENCE IMAGE IS A BINDING SUBJECT REFERENCE. Preserve the same primary person from the uploaded image: apparent age group, gender presentation, facial identity, hairstyle, body proportions, skin tone, and recognizable features. Do not substitute the person with a different person or a different gender.',
+    'Keep the person as the main subject. Preserve pose, framing, and camera relationship unless the user explicitly asks to change one of them. The uploaded image must remain visibly recognizable in the result.',
+    `Person pose and body variation: ${poseStrength}%. ${poseDirection}`,
+    `Style and scene transformation: ${styleStrength}%. ${transformation}`,
+    `Requested visual direction: ${style}.`,
+    prompt ? `User-requested changes: ${prompt}` : '',
+    'Never turn this into a text-only generation. Never ignore the uploaded reference image. Avoid: different person, identity loss, gender swap, age swap, face replacement, unrelated subject, missing subject.',
+    negative ? `Additional avoid list: ${negative}.` : ''
+  ].filter(Boolean).join('\n');
+}
 function makeImageFilename(kind) { return `prompt-pop-${kind}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`; }
 async function saveGeneratedImage(url, kind) {
   if (!url) return showToast('请先生成图片');
