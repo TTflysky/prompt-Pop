@@ -85,6 +85,7 @@ public class MainActivity extends Activity {
     private class ApiBridge {
         @JavascriptInterface
         public void request(final String requestId, final String payload) {
+            GenerationService.begin(MainActivity.this);
             new Thread(() -> executeRequest(requestId, payload)).start();
         }
 
@@ -102,6 +103,7 @@ public class MainActivity extends Activity {
         public void reloadUpdatedApp() {
             runOnUiThread(() -> loadAppContent());
         }
+
     }
 
     private boolean isLocalAppUrl(String url) {
@@ -261,6 +263,7 @@ public class MainActivity extends Activity {
             sendResult(requestId, 0, "", error.getMessage() == null ? "Native request failed" : error.getMessage());
         } finally {
             if (connection != null) connection.disconnect();
+            GenerationService.end();
         }
     }
 
