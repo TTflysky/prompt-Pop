@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.24';
+const APP_VERSION = '1.2.25';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -278,6 +278,7 @@ const imagePrompt = $('#imagePrompt');
 const imageCount = $('#imageCount');
 const imageControls = ['imageSubject', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'negativePrompt'];
 function buildImagePrompt() {
+  if (!$('#useImageControls').checked) return;
   const subject = $('#imageSubject').value.trim() || '\u9ad8\u8d28\u91cf\u89c6\u89c9\u4f5c\u54c1';
   const lens = $('#lensSlider').value;
   const detail = $('#detailSlider').value;
@@ -292,6 +293,7 @@ function buildImagePrompt() {
 }
 imageControls.forEach(id => $(`#${id}`).addEventListener('input', buildImagePrompt));
 imageControls.forEach(id => $(`#${id}`).addEventListener('change', buildImagePrompt));
+$('#useImageControls').addEventListener('change', event => { const enabled = event.target.checked; $('#imageControlsStatus').textContent = enabled ? '已开启：风格、镜头、光线和滑块会写入提示词' : '已关闭：保留你手动输入的提示词，不会自动改写'; if (enabled) buildImagePrompt(); showToast(enabled ? '已启用通用提示词控件' : '已关闭通用提示词控件'); });
 $('#imageCopyButton').addEventListener('click', async () => { if (!imagePrompt.value) return; showToast(await copyText(imagePrompt.value) ? '\u751f\u56fe\u63d0\u793a\u8bcd\u5df2\u590d\u5236' : '\u590d\u5236\u5931\u8d25\uff0c\u8bf7\u957f\u6309\u6587\u5b57\u590d\u5236'); });
 $('#useImagePromptButton').addEventListener('click', () => { rawInput.value = imagePrompt.value; updateCount(); activatePanel('main', '#rawInput'); showToast('\u5df2\u5e26\u5165\u901a\u7528\u4f18\u5316\u5668'); });
 let imageGenerateMode = 'text';
@@ -456,10 +458,10 @@ function buildI2IPrompt(prompt, style, poseStrength, styleStrength, negative) {
 }
 function makeImageFilename(kind) { return `prompt-pop-${kind}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`; }
 const framePresets = [
-  ['经典黑边', '#111', '#fff', 34], ['奶油相纸', '#fff4d6', '#fff', 46], ['拍立得', '#fff', '#fff', 58], ['富士绿', '#176e57', '#e8f4e7', 38], ['柯达黄', '#f2c500', '#fff7cf', 42],
-  ['红色杂志', '#e53935', '#fff0ec', 42], ['宝丽蓝', '#1878de', '#edf5ff', 38], ['粉色漫画', '#ff4f9a', '#fff0f8', 36], ['复古棕', '#704a2e', '#f5e4c9', 44], ['银盐黑白', '#d4d4d4', '#111', 36],
-  ['霓虹紫', '#7d3cff', '#f1eaff', 38], ['赛博青', '#00c9c8', '#e5ffff', 38], ['森林绿', '#2f7c49', '#ebf7e7', 42], ['橙色胶片', '#ef791b', '#fff2db', 44], ['蓝晒印刷', '#174d8a', '#dceaff', 40],
-  ['金色画框', '#b48a2f', '#fff9e6', 48], ['白色双线', '#fff', '#f7f7f7', 42], ['黑金海报', '#111', '#fcce2e', 46], ['薄荷波普', '#46cdaa', '#edfff8', 38], ['樱桃红', '#d91f3e', '#fff0f2', 40]
+  ['经典拍立得', '#f7f7f2', '#fff', 72], ['黑白画廊', '#111', '#f7f7f5', 66], ['35mm 胶片', '#151515', '#f2e6c9', 62], ['富士相纸', '#1d7059', '#eff7ed', 68], ['柯达胶卷', '#e8b900', '#fff5c9', 70],
+  ['杂志封面', '#d63245', '#fff0ef', 66], ['日杂留白', '#f7eadb', '#fffdf9', 82], ['手账胶带', '#e9a4b6', '#fff6f0', 74], ['复古票根', '#7c563c', '#f6ead2', 68], ['接触表', '#202020', '#f5f5f0', 64],
+  ['明信片', '#2e78ad', '#f1f2e9', 78], ['宝丽蓝晒', '#174d8a', '#e6efff', 72], ['艺术画册', '#a57d47', '#fffaf0', 84], ['便利贴', '#f4cc49', '#fff7c6', 70], ['涂鸦贴纸', '#ff589d', '#fff1f8', 62],
+  ['电影海报', '#292433', '#f5eee3', 74], ['暗房银盐', '#c9c9c9', '#161616', 68], ['法式画报', '#7f2f42', '#fff4ef', 82], ['海盐蓝', '#4e91ad', '#eff8fa', 76], ['档案卡片', '#7c9b73', '#f3f3df', 78]
 ];
 let pendingImageExport = null;
 let selectedFrameIndex = 0;
