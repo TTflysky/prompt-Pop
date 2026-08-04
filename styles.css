@@ -45,6 +45,7 @@ dialog { width: min(440px, calc(100% - 30px)); padding: 0; color: var(--ink); ba
 @media (max-width: 600px) { .frame-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }.frame-option { min-height: 76px; font-size: 10px; }.frame-swatch { height: 40px; } }
 @media (max-width: 390px) { .reference-image-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .breakdown-only-body { height: clamp(430px, 62dvh, 720px) !important; display: block; }.breakdown-only-body pre { min-height: 0; height: 100% !important; max-height: none !important; }
+.dragging-file { background: #bdefff !important; outline: 4px solid var(--blue); outline-offset: 3px; transform: translateY(-1px); }
 @media (max-width: 600px) {
   body { min-width: 0; overflow-x: hidden; }
   .topbar { min-height: 70px; height: auto; padding: 12px 14px; gap: 12px; }

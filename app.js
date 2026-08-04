@@ -436,6 +436,24 @@ function addDirectI2IReferences(files) {
   if (!allowed.length) return showToast(directI2IFiles.length >= DIRECT_I2I_MAX_REFERENCES ? '最多添加 6 张参考图' : '没有可添加的新图片');
   directI2IFiles.push(...allowed); renderDirectI2IReferences(); showToast(`已添加 ${allowed.length} 张参考图`);
 }
+function getDroppedImageFiles(event) {
+  const files = [...(event.dataTransfer?.files || [])].filter(file => file.type?.startsWith('image/'));
+  if (files.length) return files;
+  return [...(event.dataTransfer?.items || [])].filter(item => item.kind === 'file' && item.type?.startsWith('image/')).map(item => item.getAsFile()).filter(Boolean);
+}
+function enableImageDrop(target, onFiles, maxFiles = 1) {
+  let dragDepth = 0;
+  const clear = () => { dragDepth = 0; target.classList.remove('dragging-file'); };
+  target.addEventListener('dragenter', event => { if (!getDroppedImageFiles(event).length && !event.dataTransfer?.types?.includes('Files')) return; event.preventDefault(); dragDepth += 1; target.classList.add('dragging-file'); });
+  target.addEventListener('dragover', event => { if (event.dataTransfer?.types?.includes('Files')) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } });
+  target.addEventListener('dragleave', event => { if (dragDepth > 0) dragDepth -= 1; if (!dragDepth) target.classList.remove('dragging-file'); });
+  target.addEventListener('drop', event => { event.preventDefault(); clear(); const files = getDroppedImageFiles(event).slice(0, maxFiles); if (!files.length) return showToast('请拖入图片文件'); onFiles(files); });
+}
+enableImageDrop($('#breakdownUpload').closest('.breakdown-dropzone'), files => {
+  const file = files[0]; breakdownFile = file;
+  const reader = new FileReader(); reader.onload = () => { breakdownImageData = reader.result; $('#breakdownPreview').src = breakdownImageData; $('#breakdownPreviewWrap').hidden = false; showToast('图片已拖入拆图分析'); }; reader.readAsDataURL(file);
+});
+enableImageDrop($('#directI2IUpload').closest('.control-field'), files => addDirectI2IReferences(files), DIRECT_I2I_MAX_REFERENCES);
 $('#directI2IUpload').addEventListener('change', event => { addDirectI2IReferences(event.target.files); event.target.value = ''; });
 $('#directI2ICamera').addEventListener('change', event => { addDirectI2IReferences(event.target.files); event.target.value = ''; });
 $('#directI2IReferenceGrid').addEventListener('click', event => { const button = event.target.closest('[data-direct-i2i-remove]'); if (!button) return; directI2IFiles.splice(Number(button.dataset.directI2iRemove), 1); renderDirectI2IReferences(); showToast('已移除参考图'); });
