@@ -13,6 +13,7 @@ import android.os.PowerManager;
 /** Keeps in-flight API work alive while the app is backgrounded. */
 public class GenerationService extends Service {
     private static final String CHANNEL_ID = "promptpop_generation";
+    private static final String COMPLETE_CHANNEL_ID = "promptpop_complete";
     private static final int NOTIFICATION_ID = 1208;
     private static int activeRequests = 0;
     private static GenerationService runningService;
@@ -47,7 +48,7 @@ public class GenerationService extends Service {
         PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
         if (powerManager != null) {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PromptPop:Generation");
-            wakeLock.acquire(10 * 60 * 1000L);
+            wakeLock.acquire(20 * 60 * 1000L);
         }
         synchronized (GenerationService.class) {
             if (activeRequests == 0) {
@@ -61,7 +62,7 @@ public class GenerationService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         startForeground(NOTIFICATION_ID, createNotification());
-        return START_NOT_STICKY;
+        return START_STICKY;
     }
 
     @Override
@@ -88,6 +89,37 @@ public class GenerationService extends Service {
         channel.setDescription("图片和提示词正在生成时保持任务运行");
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null) manager.createNotificationChannel(channel);
+        NotificationChannel completeChannel = new NotificationChannel(
+            COMPLETE_CHANNEL_ID,
+            "Prompt Pop 生成完成",
+            NotificationManager.IMPORTANCE_DEFAULT
+        );
+        completeChannel.setDescription("图片生成完成后的保存提醒");
+        if (manager != null) manager.createNotificationChannel(completeChannel);
+    }
+
+    public static void notifyCompleted(Context context, boolean savedToGallery) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                COMPLETE_CHANNEL_ID,
+                "Prompt Pop 生成完成",
+                NotificationManager.IMPORTANCE_DEFAULT
+            );
+            channel.setDescription("图片生成完成后的保存提醒");
+            NotificationManager manager = context.getSystemService(NotificationManager.class);
+            if (manager != null) manager.createNotificationChannel(channel);
+        }
+        Notification.Builder builder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+            ? new Notification.Builder(context, COMPLETE_CHANNEL_ID)
+            : new Notification.Builder(context);
+        Notification notification = builder
+            .setSmallIcon(android.R.drawable.stat_sys_upload_done)
+            .setContentTitle("Prompt Pop 图片生成完成")
+            .setContentText(savedToGallery ? "图片已自动保存到系统相册" : "图片已生成，打开 Prompt Pop 查看结果")
+            .setAutoCancel(true)
+            .build();
+        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager != null) manager.notify((int) (System.currentTimeMillis() & 0x7fffffff), notification);
     }
 
     private Notification createNotification() {

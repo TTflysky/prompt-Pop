@@ -1,9 +1,11 @@
 package com.promptpop.app;
 
 import android.app.Activity;
+import android.Manifest;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -32,6 +34,7 @@ import java.util.UUID;
 public class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 1001;
     private static final int CAMERA_CAPTURE_REQUEST = 1002;
+    private static final int NOTIFICATION_PERMISSION_REQUEST = 1003;
     private static final String UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json";
     private static final String UPDATE_ASSET_ROOT = "https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/";
     private static final String[] UPDATE_FILES = {"index.html", "styles.css", "app.js"};
@@ -101,6 +104,9 @@ public class MainActivity extends Activity {
         settings.setDisplayZoomControls(false);
         webView.addJavascriptInterface(new ApiBridge(), "PromptPopNative");
         setContentView(webView);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_PERMISSION_REQUEST);
+        }
         loadAppContent();
     }
 
@@ -300,7 +306,12 @@ public class MainActivity extends Activity {
             }
             int status = connection.getResponseCode();
             InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-            sendResult(requestId, status, readStream(stream), "");
+            String responseBody = readStream(stream);
+            if (status >= 200 && status < 300 && (url.getPath().endsWith("/images/generations") || url.getPath().endsWith("/images/edits"))) {
+                boolean saved = autoSaveGeneratedImage(responseBody);
+                GenerationService.notifyCompleted(MainActivity.this, saved);
+            }
+            sendResult(requestId, status, responseBody, "");
         } catch (Exception error) {
             sendResult(requestId, 0, "", error.getMessage() == null ? "Native request failed" : error.getMessage());
         } finally {
@@ -354,6 +365,31 @@ public class MainActivity extends Activity {
     }
 
     private void saveImageToGallery(String requestId, String source, String filename) {
+        try {
+            sendSaveImageResult(requestId, writeImageToGallery(source, filename).toString(), "");
+        } catch (Exception error) {
+            sendSaveImageResult(requestId, "", error.getMessage() == null ? "Unable to save image" : error.getMessage());
+        }
+    }
+
+    private boolean autoSaveGeneratedImage(String responseBody) {
+        try {
+            JSONObject response = new JSONObject(responseBody);
+            JSONArray data = response.optJSONArray("data");
+            JSONObject image = data == null ? null : data.optJSONObject(0);
+            if (image == null) return false;
+            String source = image.optString("b64_json");
+            if (!source.isEmpty()) source = "data:image/png;base64," + source;
+            if (source.isEmpty()) source = image.optString("url");
+            if (source.isEmpty()) return false;
+            writeImageToGallery(source, "prompt-pop-auto-" + System.currentTimeMillis() + ".png");
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private Uri writeImageToGallery(String source, String filename) throws Exception {
         Uri savedUri = null;
         try {
             ImageData image = loadImageData(source);
@@ -379,10 +415,10 @@ public class MainActivity extends Activity {
                 ready.put(MediaStore.Images.Media.IS_PENDING, 0);
                 resolver.update(savedUri, ready, null, null);
             }
-            sendSaveImageResult(requestId, savedUri.toString(), "");
+            return savedUri;
         } catch (Exception error) {
             if (savedUri != null) getContentResolver().delete(savedUri, null, null);
-            sendSaveImageResult(requestId, "", error.getMessage() == null ? "Unable to save image" : error.getMessage());
+            throw error;
         }
     }
 

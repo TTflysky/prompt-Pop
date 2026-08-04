@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.29';
+const APP_VERSION = '1.2.30';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -343,7 +343,7 @@ async function generateImage() {
     const data = await response.json(); const image = data.data?.[0];
     generatedImageUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || '';
     if (!generatedImageUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247');
-    $('#imageOutput').innerHTML = `<img src="${generatedImageUrl}" alt="生成结果" />`; $('#saveTextToImageButton').disabled = false; showToast('\u56fe\u7247\u751f\u6210\u5b8c\u6210');
+    $('#imageOutput').innerHTML = `<img src="${generatedImageUrl}" alt="生成结果" />`; $('#saveTextToImageButton').disabled = false; queueWorkspacePersist(); showToast('\u56fe\u7247\u751f\u6210\u5b8c\u6210');
   } catch (error) { $('#imageOutput').innerHTML = `<div class="image-output-placeholder">${error.message}</div>`; showToast(`\u751f\u6210\u5931\u8d25\uff1a${error.message}`); }
   finally { button.disabled = false; button.innerHTML = imageGenerateMode === 'image' ? '\u2301 <span>\u56fe\u751f\u56fe</span>' : '\u2726 <span>\u6587\u751f\u56fe</span>'; }
 }
@@ -433,7 +433,7 @@ async function generateDirectI2I() {
     const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); form.append('size', $('#directI2ISize').value); directI2IFiles.forEach(file => form.append('image', file, file.name)); appendImageReferenceFidelity(form, config, config.model);
     const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/images/edits`, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     if (!response.ok) { const detail = await response.text(); throw new Error(`HTTP ${response.status} ${detail.slice(0, 180)}`); }
-    const image = (await response.json()).data?.[0]; directI2IResultUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || ''; if (!directI2IResultUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247'); $('#directI2IOutput').innerHTML = `<img src="${directI2IResultUrl}" alt="图生图结果" />`; $('#saveDirectI2IButton').disabled = false; showToast('\u56fe\u751f\u56fe\u5b8c\u6210');
+    const image = (await response.json()).data?.[0]; directI2IResultUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || ''; if (!directI2IResultUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247'); $('#directI2IOutput').innerHTML = `<img src="${directI2IResultUrl}" alt="图生图结果" />`; $('#saveDirectI2IButton').disabled = false; queueWorkspacePersist(); showToast('\u56fe\u751f\u56fe\u5b8c\u6210');
   } catch (error) { $('#directI2IOutput').innerHTML = `<div class="image-output-placeholder">${error.message}</div>`; showToast(`\u56fe\u751f\u56fe\u5931\u8d25：${error.message}`); }
   finally { button.disabled = false; button.innerHTML = '\u2301 <span>\u751f\u6210\u56fe\u751f\u56fe</span>'; }
 }
@@ -666,7 +666,46 @@ function openImagePreview(url) { if (!url) return; $('#fullImagePreview').src = 
 $('#imageOutput').addEventListener('click', event => { if (event.target.tagName === 'IMG') openImagePreview(generatedImageUrl); });
 $('#directI2IOutput').addEventListener('click', event => { if (event.target.tagName === 'IMG') openImagePreview(directI2IResultUrl); });
 $('#closeImagePreview').addEventListener('click', () => $('#imagePreviewDialog').close());
-buildImagePrompt();
+const WORKSPACE_DB_NAME = 'prompt-pop-workspace';
+const WORKSPACE_STATE_KEY = 'latest-workspace';
+let workspacePersistTimer = 0;
+function openWorkspaceDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(WORKSPACE_DB_NAME, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('workspace');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+function workspaceRead(db, key) { return new Promise((resolve, reject) => { const request = db.transaction('workspace', 'readonly').objectStore('workspace').get(key); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
+function workspaceWrite(db, key, value) { return new Promise((resolve, reject) => { const request = db.transaction('workspace', 'readwrite').objectStore('workspace').put(value, key); request.onsuccess = () => resolve(); request.onerror = () => reject(request.error); }); }
+function queueWorkspacePersist() { clearTimeout(workspacePersistTimer); workspacePersistTimer = setTimeout(() => { persistWorkspaceState(); }, 350); }
+async function persistWorkspaceState() {
+  try {
+    const ids = ['rawInput', 'optimizedOutput', 'imagePrompt', 'negativePrompt', 'imageSubject', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'directI2IPrompt', 'directI2ISize', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative', 'breakdownResult'];
+    const values = {};
+    ids.forEach(id => { const element = $(`#${id}`); if (element) values[id] = 'value' in element ? element.value : element.textContent; });
+    const db = await openWorkspaceDb();
+    await workspaceWrite(db, WORKSPACE_STATE_KEY, { values, imageGenerateMode, generatedImageUrl, directI2IResultUrl, savedAt: Date.now() });
+    db.close();
+  } catch { /* Session recovery is best-effort and must never interrupt generation. */ }
+}
+async function restoreWorkspaceState() {
+  try {
+    const db = await openWorkspaceDb(); const state = await workspaceRead(db, WORKSPACE_STATE_KEY); db.close();
+    if (!state) return;
+    Object.entries(state.values || {}).forEach(([id, value]) => { const element = $(`#${id}`); if (!element) return; if ('value' in element) element.value = value; else element.textContent = value; });
+    setImageGenerateMode(state.imageGenerateMode || 'text');
+    if (state.generatedImageUrl) { generatedImageUrl = state.generatedImageUrl; $('#imageOutput').innerHTML = `<img src="${generatedImageUrl}" alt="生成结果" />`; $('#saveTextToImageButton').disabled = false; }
+    if (state.directI2IResultUrl) { directI2IResultUrl = state.directI2IResultUrl; $('#directI2IOutput').innerHTML = `<img src="${directI2IResultUrl}" alt="图生图结果" />`; $('#saveDirectI2IButton').disabled = false; }
+    ['lensSlider', 'detailSlider', 'styleSlider', 'directI2IPoseStrength', 'directI2IStrength'].forEach(id => $(`#${id}`).dispatchEvent(new Event('input')));
+    updateCount();
+  } catch { /* A missing or unavailable cache should not block the workspace. */ }
+}
+document.addEventListener('input', event => { if (!event.target.closest('#settingsDialog')) queueWorkspacePersist(); });
+document.addEventListener('change', event => { if (!event.target.closest('#settingsDialog')) queueWorkspacePersist(); });
+window.addEventListener('pagehide', persistWorkspaceState);
+restoreWorkspaceState().finally(() => { if (!imagePrompt.value) buildImagePrompt(); });
 
 async function optimize() {
   const idea = rawInput.value.trim();

@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="favicon.png" />
     <title>Prompt Pop! 提示词优化工坊</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -12,18 +13,20 @@
         <div class="brand-mark" aria-hidden="true">✦</div>
         <div>
           <div class="brand-name">PROMPT POP!</div>
-          <div class="brand-subtitle">提示词优化工坊</div>
+          <div class="brand-subtitle">提示词优化工坊 · v1.2.30</div>
         </div>
       </div>
       <div class="toolbar">
         <button class="icon-button" id="historyButton" title="查看历史记录" aria-label="查看历史记录">◴</button>
         <button class="icon-button" id="themeButton" title="切换明暗主题" aria-label="切换明暗主题">◔</button>
+        <button class="icon-button" id="soundButton" title="切换交互音效" aria-label="切换交互音效">♫</button>
         <button class="icon-button blue" id="settingsButton" title="打开设置" aria-label="打开设置">⚙</button>
       </div>
     </header>
 
     <main class="page-shell">
-      <section class="style-section">
+      <nav class="section-tabs" aria-label="功能板块"><button class="section-tab active" data-panel="prompt" type="button">✦ 通用优化</button><button class="section-tab" data-panel="image" type="button">▣ 文生图</button><button class="section-tab" data-panel="img2img" type="button">⌁ 图生图</button><button class="section-tab" data-panel="breakdown" type="button">◎ 拆图分析</button></nav>
+      <section class="style-section app-panel-section active" data-panel-section="prompt">
         <div class="section-heading">
           <h1>CHOOSE YOUR STYLE</h1>
           <div class="shortcut">按 <kbd>⌘ + ENTER</kbd> 快速优化</div>
@@ -31,7 +34,7 @@
         <div class="mode-grid" id="modeGrid"></div>
       </section>
 
-      <section class="workbench">
+      <section class="workbench app-panel-section active" data-panel-section="prompt">
         <article class="panel raw-panel">
           <div class="panel-header red">
             <div class="window-dots"><i></i><i></i><i></i></div>
@@ -66,31 +69,124 @@
           </div>
         </article>
       </section>
+
+      <section class="image-section app-panel-section" data-panel-section="image">
+        <div class="section-heading image-heading">
+          <h1>IMAGE PROMPT LAB</h1>
+          <div class="shortcut">专为生图模型设计</div>
+        </div>
+        <div class="image-lab">
+          <article class="panel image-controls">
+            <div class="panel-header yellow-header">
+              <div class="window-dots"><i></i><i></i><i></i></div>
+              <span>VISUAL CONTROLS</span>
+            </div>
+            <div class="control-grid">
+              <div class="generation-switch wide" role="tablist" aria-label="生成模式"><button class="switch-button active" data-generate-mode="text" type="button">文生图</button><button class="switch-button" data-generate-mode="image" type="button">图生图</button></div>
+              <label class="generation-switch wide prompt-control-toggle"><input id="useImageControls" type="checkbox" checked /><span>使用通用提示词控件</span><small id="imageControlsStatus">已开启：风格、镜头、光线和滑块会写入提示词</small></label>
+              <label class="control-field" for="imageModel">生图模型<select id="imageModel"><option value="gpt-image-2">GPT Image 2</option><option value="gpt-image-1">GPT Image 1</option><option value="qwen-image-plus">通义万相 Image Plus</option><option value="doubao-seedream">豆包 Seedream</option><option value="custom">自定义模型</option></select></label>
+              <label class="control-field" for="imageModelCustom">自定义生图模型<input id="imageModelCustom" type="text" placeholder="仅选择自定义模型时填写" autocomplete="off" /></label>
+              <label class="control-field" for="imageSize">图片规格<select id="imageSize"><option value="1024x1024">1K 方图 · 1024 × 1024</option><option value="1536x1024">1K 横图 · 1536 × 1024</option><option value="1024x1536">1K 竖图 · 1024 × 1536</option><option value="2048x2048">2K 方图 · 2048 × 2048</option><option value="auto">自动匹配</option></select></label>
+              <label class="control-field wide upload-field" for="imageUpload">参考图片<span class="upload-box"><input id="imageUpload" type="file" accept="image/png,image/jpeg,image/webp" /><span id="imageUploadName">点击选择图片，支持 PNG / JPG / WEBP</span></span><small class="upload-status" id="imageUploadStatus">未上传图片时为文生图，上传后自动切换为图生图</small></label>
+              <div class="image-preview-wrap wide" id="imagePreviewWrap" hidden><img id="imagePreview" alt="参考图片预览" /><button class="remove-image" id="removeImageButton" type="button" aria-label="移除参考图片">×</button></div>
+              <label class="control-field wide" for="imageSubject">画面主体<input id="imageSubject" type="text" placeholder="例如：雨夜街头的复古跑车" /></label>
+              <label class="control-field" for="imageStyle">视觉风格<select id="imageStyle"><option value="cinematic, photorealistic, cinematic color grading">电影感写实</option><option value="anime illustration, clean lineart, vibrant colors">日系动漫</option><option value="American retro comic, halftone dots, bold ink outline">美式复古漫画</option><option value="cyberpunk, neon lights, futuristic atmosphere">赛博朋克</option><option value="3D render, octane render, detailed materials">3D 渲染</option><option value="watercolor painting, soft washes, paper texture">水彩插画</option><option value="Chinese ink painting, expressive brushwork, negative space">水墨国风</option><option value="editorial fashion photography, high-end magazine">时尚摄影</option></select></label>
+              <label class="control-field" for="imageAngle">视角<select id="imageAngle"><option value="eye-level view">平视</option><option value="low-angle view">低机位仰拍</option><option value="high-angle view">高机位俯拍</option><option value="top-down view">正上方俯视</option><option value="dutch angle">荷兰斜角</option><option value="close-up perspective">近距离特写</option></select></label>
+              <label class="control-field" for="imageLight">光线氛围<select id="imageLight"><option value="soft natural light, golden hour">黄金时刻</option><option value="dramatic studio lighting, hard shadows">戏剧硬光</option><option value="neon rim light, blue and magenta glow">霓虹边缘光</option><option value="soft overcast light, gentle shadows">柔和阴天</option><option value="volumetric light rays, atmospheric haze">体积光</option></select></label>
+              <label class="control-field" for="imageComposition">构图方式<select id="imageComposition"><option value="rule of thirds composition">三分法构图</option><option value="symmetrical centered composition">中心对称</option><option value="wide establishing shot">宽幅环境大景</option><option value="dynamic diagonal composition">动态对角线</option><option value="minimalist composition with negative space">极简留白</option></select></label>
+              <label class="control-field" for="imageRatio">画面比例<select id="imageRatio"><option value="--ar 1:1">1:1 方图</option><option value="--ar 16:9">16:9 横图</option><option value="--ar 9:16">9:16 竖图</option><option value="--ar 4:3">4:3 标准</option><option value="--ar 3:2">3:2 摄影</option></select></label>
+              <div class="slider-field"><div><span>镜头焦段</span><strong id="lensValue">50mm</strong></div><input id="lensSlider" type="range" min="14" max="200" value="50" step="1" /></div>
+              <div class="slider-field"><div><span>细节强度</span><strong id="detailValue">75%</strong></div><input id="detailSlider" type="range" min="0" max="100" value="75" step="1" /></div>
+              <div class="slider-field"><div><span>风格化程度</span><strong id="styleValue">65%</strong></div><input id="styleSlider" type="range" min="0" max="100" value="65" step="1" /></div>
+              <label class="control-field wide" for="negativePrompt">反向提示词<input id="negativePrompt" type="text" placeholder="例如：模糊、低清晰度、畸形手指、文字水印" /></label>
+            </div>
+          </article>
+          <article class="panel image-result-panel">
+            <div class="panel-header blue-header"><div class="window-dots"><i></i><i></i><i></i></div><span>IMAGE PROMPT</span><span class="counter" id="imageCount">0 字</span></div>
+            <div class="image-result-body"><div class="image-output" id="imageOutput"><div class="image-output-placeholder">生成的图片会显示在这里</div></div><textarea id="imagePrompt" placeholder="输入生图提示词，或使用下方控件自动组合"></textarea></div>
+            <div class="panel-footer"><button class="soft-button" id="imageCopyButton">▣ <span>复制提示词</span></button><button class="action-button orange" id="optimizeImageButton">✦ <span>优化生图词</span></button><button class="action-button blue" id="generateImageButton">✦ <span>文生图</span></button><button class="action-button green" id="saveTextToImageButton" type="button" disabled>⇩ <span>保存图片</span></button><button class="action-button green" id="useImagePromptButton">✣ <span>带入通用优化</span></button></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="image-section app-panel-section" data-panel-section="img2img">
+        <div class="section-heading image-heading"><h1>IMAGE TO IMAGE</h1><div class="shortcut">上传参考图后直接生成</div></div>
+        <div class="image-lab">
+          <article class="panel image-controls">
+            <div class="panel-header yellow-header"><div class="window-dots"><i></i><i></i><i></i></div><span>REFERENCE + CONTROLS</span></div>
+            <div class="control-grid">
+              <label class="control-field wide" for="directI2IUpload">添加参考图片<span class="upload-box"><input id="directI2IUpload" type="file" accept="image/png,image/jpeg,image/webp" multiple /><span id="directI2IUploadName">点击添加图片，最多 6 张，按编号发送</span></span><small class="upload-status" id="directI2IReferenceStatus">图片只按编号排列；图 1、图 2 的用途由你在提示词中自由说明。</small></label>
+              <label class="action-button orange wide camera-upload-button">拍照作为参考图<input id="directI2ICamera" type="file" accept="image/*" capture="environment" /></label>
+              <div class="image-preview-wrap reference-image-wrap wide" id="directI2IPreviewWrap" hidden><div class="reference-image-grid" id="directI2IReferenceGrid" aria-label="已添加的参考图片"></div></div>
+              <label class="control-field" for="directI2ISize">图片规格<select id="directI2ISize"><option value="1024x1024">1K 方图 · 1024 × 1024</option><option value="1536x1024">1K 横图 · 1536 × 1024</option><option value="1024x1536">1K 竖图 · 1024 × 1536</option><option value="2048x2048">2K 方图 · 2048 × 2048</option><option value="auto">自动匹配</option></select></label>
+              <label class="control-field" for="directI2IStyle">风格方向<select id="directI2IStyle"><option value="preserve the original style of the reference image">保持原风格</option><option value="cinematic photorealistic">电影感写实</option><option value="American retro comic with halftone dots">美式复古漫画</option><option value="Japanese anime illustration">日系动漫</option><option value="editorial fashion photography">时尚摄影</option></select></label>
+              <div class="slider-field"><div><span>人物参考还原度</span><strong id="directI2IPoseStrengthValue">50%</strong></div><input id="directI2IPoseStrength" type="range" min="0" max="100" value="50" step="1" /><small>0% 仅锁定脸部身份；100% 还原动作、表情、服装与肢体。</small></div>
+              <div class="slider-field"><div><span>风格 / 场景改动</span><strong id="directI2IStrengthValue">70%</strong></div><input id="directI2IStrength" type="range" min="0" max="100" value="70" step="1" /><small>控制画风、服装、背景与光线；参考人物始终保留。</small></div>
+              <label class="control-field" for="directI2INegative">反向提示词<input id="directI2INegative" type="text" placeholder="如：模糊、水印、畸形" /></label>
+              <div class="quick-presets wide" id="quickPresets" aria-label="快捷出图预设"></div>
+            </div>
+          </article>
+          <article class="panel image-result-panel">
+            <div class="panel-header blue-header"><div class="window-dots"><i></i><i></i><i></i></div><span>IMG2IMG PROMPT</span></div>
+            <div class="image-result-body"><div class="image-output" id="directI2IOutput"><div class="image-output-placeholder">图生图结果会显示在这里，点击图片可查看全图</div></div><textarea id="directI2IPrompt" placeholder="直接输入或修改图生图提示词"></textarea></div>
+            <div class="panel-footer"><button class="action-button blue" id="generateDirectI2IButton" type="button">⌁ <span>生成图生图</span></button><button class="action-button green" id="saveDirectI2IButton" type="button" disabled>⇩ <span>保存图片</span></button></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="breakdown-section app-panel-section" data-panel-section="breakdown">
+        <div class="section-heading breakdown-heading"><h1>IMAGE BREAKDOWN</h1><div class="shortcut">把一张图拆成可复用的提示词</div></div>
+        <div class="breakdown-lab">
+          <article class="panel breakdown-upload-panel">
+            <div class="panel-header red"><div class="window-dots"><i></i><i></i><i></i></div><span>REFERENCE IMAGE</span></div>
+            <div class="breakdown-upload-body">
+              <label class="breakdown-dropzone" for="breakdownUpload"><input id="breakdownUpload" type="file" accept="image/png,image/jpeg,image/webp" /><span class="breakdown-upload-icon">⌁</span><strong>上传要拆解的图片</strong><small>支持 PNG / JPG / WEBP，手机可直接从相册选择</small></label>
+              <div class="breakdown-preview-wrap" id="breakdownPreviewWrap" hidden><img id="breakdownPreview" alt="待分析图片" /><button class="remove-image" id="removeBreakdownButton" type="button" aria-label="移除图片">×</button></div>
+              <div class="breakdown-options"><label class="control-field" for="breakdownLanguage">输出语言<select id="breakdownLanguage"><option value="中文">中文</option><option value="English">English</option></select></label><label class="control-field" for="breakdownDetail">拆解深度<select id="breakdownDetail"><option value="极致详细">极致详细</option><option value="专业详细">专业详细</option><option value="快速概括">快速概括</option></select></label></div>
+            </div>
+            <div class="panel-footer"><button class="action-button red-action" id="analyzeImageButton" type="button">✦ <span>开始拆解图片</span></button></div>
+          </article>
+          <article class="panel breakdown-result-panel">
+            <div class="panel-header green-header"><div class="window-dots"><i></i><i></i><i></i></div><span>STYLE DNA</span><span class="counter" id="breakdownCount">0 字</span></div>
+            <div class="breakdown-result-body breakdown-only-body"><pre id="breakdownResult">上传图片后，详细的风格化提示词会显示在这里。</pre></div>
+            <div class="panel-footer"><button class="soft-button" id="copyBreakdownButton" type="button">▣ <span>复制拆解</span></button><button class="action-button orange" id="sendToTextToImageButton" type="button">✦ <span>带入文生图</span></button></div>
+          </article>
+        </div>
+      </section>
     </main>
 
     <div class="toast" id="toast" role="status"></div>
+    <dialog class="image-preview-dialog" id="imagePreviewDialog"><div class="dialog-top"><span>IMAGE PREVIEW</span><button class="close-button" id="closeImagePreview" type="button" aria-label="关闭">×</button></div><img id="fullImagePreview" alt="图片全屏预览" /></dialog>
 
     <dialog class="settings-dialog" id="settingsDialog">
       <form method="dialog" id="settingsForm">
         <div class="dialog-top"><span>API SETTINGS</span><button class="close-button" value="cancel" aria-label="关闭">×</button></div>
-        <label for="apiKey">API Key</label>
-        <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
-        <label for="provider">服务商</label>
-        <select id="provider">
-          <option value="openai">GPT / OpenAI</option>
-          <option value="deepseek">DeepSeek 深度求索</option>
-          <option value="qwen">通义千问</option>
-          <option value="doubao">豆包 / 火山引擎</option>
-          <option value="zhipu">智谱 GLM</option>
-          <option value="moonshot">月之暗面 Kimi</option>
-          <option value="siliconflow">硅基流动</option>
-          <option value="custom">自定义接口</option>
-        </select>
-        <label for="baseUrl">接口地址 Base URL</label>
-        <input id="baseUrl" type="url" placeholder="https://api.openai.com/v1" autocomplete="url" />
-        <label for="modelName">模型名称</label>
-        <input id="modelName" type="text" placeholder="gpt-4o-mini" autocomplete="off" />
-        <p class="dialog-note">Key 仅保存在当前浏览器本地，用于演示本地交互。</p>
+        <div class="config-tabs" role="tablist"><button class="config-tab active" data-config-tab="text" type="button">文本优化</button><button class="config-tab" data-config-tab="vision" type="button">视觉拆图</button><button class="config-tab" data-config-tab="image" type="button">生图模型</button></div>
+        <section class="config-pane active" data-config-pane="text">
+          <label for="textApiKey">API Key</label><input id="textApiKey" type="password" placeholder="sk-..." autocomplete="off" />
+          <label for="textProvider">服务商</label><select id="textProvider" class="provider-select"><option value="openai">GPT / OpenAI</option><option value="deepseek">DeepSeek 深度求索</option><option value="qwen">通义千问</option><option value="doubao">豆包 / 火山引擎</option><option value="zhipu">智谱 GLM</option><option value="moonshot">月之暗面 Kimi</option><option value="siliconflow">硅基流动</option><option value="custom">自定义接口</option></select>
+          <label for="textBaseUrl">接口地址 Base URL</label><input id="textBaseUrl" type="url" placeholder="https://api.openai.com/v1" autocomplete="url" />
+          <label>文本优化模型</label><div class="model-row"><select id="textModel" class="model-select"><option value="">点击 ↻ 拉取模型</option></select><button class="model-picker-trigger" data-model-picker="text" data-model-display="text" type="button" title="选择已拉取的模型" aria-haspopup="dialog">点击选择模型</button><button class="fetch-models" data-model-target="text" type="button" title="拉取模型列表">↻</button></div>
+        </section>
+        <section class="config-pane" data-config-pane="vision">
+          <label for="visionApiKey">API Key</label><input id="visionApiKey" type="password" placeholder="sk-..." autocomplete="off" />
+          <label for="visionProvider">服务商</label><select id="visionProvider" class="provider-select"><option value="openai">GPT / OpenAI</option><option value="qwen">通义千问</option><option value="doubao">豆包 / 火山引擎</option><option value="zhipu">智谱 GLM</option><option value="custom">自定义接口</option></select>
+          <label for="visionBaseUrl">接口地址 Base URL</label><input id="visionBaseUrl" type="url" placeholder="https://api.openai.com/v1" autocomplete="url" />
+          <label>视觉拆图模型</label><div class="model-row"><select id="visionModel" class="model-select"><option value="">点击 ↻ 拉取模型</option></select><button class="model-picker-trigger" data-model-picker="vision" data-model-display="vision" type="button" title="选择已拉取的模型" aria-haspopup="dialog">点击选择模型</button><button class="fetch-models" data-model-target="vision" type="button" title="拉取模型列表">↻</button></div>
+        </section>
+        <section class="config-pane" data-config-pane="image">
+          <label for="imageApiKey">API Key</label><input id="imageApiKey" type="password" placeholder="sk-..." autocomplete="off" />
+          <label for="imageProvider">服务商</label><select id="imageProvider" class="provider-select"><option value="openai">GPT / OpenAI</option><option value="qwen">通义万相</option><option value="doubao">豆包 / 火山引擎</option><option value="custom">自定义接口</option></select>
+          <label for="imageBaseUrl">接口地址 Base URL</label><input id="imageBaseUrl" type="url" placeholder="https://api.openai.com/v1" autocomplete="url" />
+          <label>生图模型</label><div class="model-row"><select id="imageServiceModel" class="model-select"><option value="">点击 ↻ 拉取模型</option></select><button class="model-picker-trigger" data-model-picker="image" data-model-display="image" type="button" title="选择已拉取的模型" aria-haspopup="dialog">点击选择模型</button><button class="fetch-models" data-model-target="image" type="button" title="拉取模型列表">↻</button></div>
+        </section>
+        <div class="model-picker-sheet" id="modelPickerSheet" hidden>
+          <div class="model-picker-card"><div class="dialog-top"><span id="modelPickerTitle">选择模型</span><button class="close-button" id="closeModelPicker" type="button" aria-label="关闭">×</button></div><div class="model-picker-list" id="modelPickerList"></div></div>
+        </div>
+        <section class="update-panel" aria-label="版本更新"><div><strong>版本更新</strong><span id="updateStatus">当前版本 v1.2.30</span></div><div class="update-actions"><button class="soft-button" id="checkUpdateButton" type="button">检查更新</button><button class="action-button blue" id="applyUpdateButton" type="button" hidden>立即更新</button></div></section>
+        <section class="audio-panel" aria-label="互动音效"><strong>互动音效</strong><div class="sound-presets" role="group" aria-label="音效风格"><button class="sound-preset" data-sound-preset="fc" type="button">FC 电子音</button><button class="sound-preset" data-sound-preset="mac" type="button">Mac 轻触感</button><button class="sound-preset" data-sound-preset="arcade" type="button">街机电子音</button></div><label class="sound-volume" for="soundVolume"><span>音量</span><output id="soundVolumeValue">80%</output><input id="soundVolume" type="range" min="20" max="100" value="80" step="1" /></label></section>
+        <section class="config-transfer" aria-label="配置导入导出"><strong>配置备份</strong><p>TXT 包含 API Key，请妥善保管。</p><div><button class="soft-button" id="exportConfigButton" type="button">导出 TXT</button><label class="action-button green import-config-button">导入 TXT<input id="importConfigInput" type="file" accept=".txt,text/plain" /></label></div></section>
+        <p class="dialog-note">三套配置分别保存在本地。视觉模型负责看图，生图模型负责出图。</p>
         <button class="save-button" value="default">保存设置</button>
       </form>
     </dialog>
@@ -99,6 +195,7 @@
       <div class="dialog-top"><span>RECENT POPS</span><button class="close-button" id="closeHistory" aria-label="关闭">×</button></div>
       <div id="historyList" class="history-list"><p class="muted">还没有优化记录。</p></div>
     </dialog>
+    <dialog class="frame-dialog" id="frameDialog"><div class="dialog-top"><span>CHOOSE A FRAME</span><button class="close-button" id="closeFrameDialog" type="button" aria-label="关闭">×</button></div><div class="frame-live-preview" id="frameLivePreview"><img id="framePreviewImage" alt="相框导出预览" /><div><strong id="framePreviewTitle">经典黑边</strong><span>PREVIEW EXPORT</span></div></div><div class="frame-grid" id="frameGrid"></div><div class="frame-actions"><button class="soft-button" id="exportOriginalButton" type="button">无相框保存</button><button class="action-button green" id="exportFramedButton" type="button">保存选中相框</button></div></dialog>
 
     <script src="app.js"></script>
   </body>
