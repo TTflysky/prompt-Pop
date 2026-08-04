@@ -94,6 +94,7 @@ const nativeRequests = new Map();
 const nativeSaveRequests = new Map();
 const nativeTextSaveRequests = new Map();
 const nativeLastImageRequests = new Map();
+let desktopActivityCount = 0;
 window.__nativeApiResponse = (id, status, body, error) => {
   const request = nativeRequests.get(id); if (!request) return; nativeRequests.delete(id);
   if (error) return request.reject(new Error(error));
@@ -138,16 +139,22 @@ async function applyHotUpdate() {
 function readFileDataUrl(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('Unable to read selected image')); reader.readAsDataURL(file); }); }
 async function apiRequest(url, options = {}) {
   if (window.PromptPopDesktop?.request) {
-    const headers = options.headers || {}; let bodyType = 'none'; let body = ''; const fields = [];
-    if (options.body instanceof FormData) {
-      bodyType = 'multipart';
-      for (const [name, value] of options.body.entries()) {
-        if (value instanceof Blob) fields.push({ name, fileName: value.name || 'upload.png', mimeType: value.type || 'image/png', fileData: await readFileDataUrl(value) });
-        else fields.push({ name, value: String(value) });
-      }
-    } else if (typeof options.body === 'string') { bodyType = 'json'; body = options.body; }
-    const result = await window.PromptPopDesktop.request(JSON.stringify({ url, method: options.method || 'GET', headers, bodyType, body, fields }));
-    return { ok: result.status >= 200 && result.status < 300, status: result.status, json: async () => JSON.parse(result.body || '{}'), text: async () => result.body || '' };
+    desktopActivityCount += 1; window.PromptPopDesktop.setActivity?.(true);
+    try {
+      const headers = options.headers || {}; let bodyType = 'none'; let body = ''; const fields = [];
+      if (options.body instanceof FormData) {
+        bodyType = 'multipart';
+        for (const [name, value] of options.body.entries()) {
+          if (value instanceof Blob) fields.push({ name, fileName: value.name || 'upload.png', mimeType: value.type || 'image/png', fileData: await readFileDataUrl(value) });
+          else fields.push({ name, value: String(value) });
+        }
+      } else if (typeof options.body === 'string') { bodyType = 'json'; body = options.body; }
+      const result = await window.PromptPopDesktop.request(JSON.stringify({ url, method: options.method || 'GET', headers, bodyType, body, fields }));
+      return { ok: result.status >= 200 && result.status < 300, status: result.status, json: async () => JSON.parse(result.body || '{}'), text: async () => result.body || '' };
+    } finally {
+      desktopActivityCount = Math.max(0, desktopActivityCount - 1);
+      if (!desktopActivityCount) window.PromptPopDesktop.setActivity?.(false);
+    }
   }
   if (!window.PromptPopNative?.request) return fetch(url, options);
   const headers = options.headers || {}; let bodyType = 'none'; let body = ''; let fields = [];

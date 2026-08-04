@@ -1,6 +1,6 @@
 {
   "name": "prompt-pop",
-  "version": "1.2.33",
+  "version": "1.2.34",
   "description": "Prompt Pop desktop workbench",
   "main": "desktop/main.cjs",
   "scripts": {

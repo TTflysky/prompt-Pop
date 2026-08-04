@@ -1,6 +1,10 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, Tray } = require('electron');
 const fs = require('fs/promises');
 const path = require('path');
+let mainWindow;
+let tray;
+let isQuitting = false;
+let activityLabel = '待命';
 
 const isSupportedEndpoint = value => {
   const url = new URL(value);
@@ -42,20 +46,44 @@ async function sourceToBuffer(source) {
 }
 
 function createWindow() {
-  const window = new BrowserWindow({
+  if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); return; }
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 960,
     minHeight: 680,
     backgroundColor: '#ffd51a',
+    icon: path.join(__dirname, 'icon.ico'),
     autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false }
   });
-  window.loadFile(path.join(__dirname, '..', 'index.html'));
+  mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
+  mainWindow.on('close', event => { if (!isQuitting) { event.preventDefault(); mainWindow.hide(); } });
+  mainWindow.on('minimize', event => { event.preventDefault(); mainWindow.hide(); });
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+  else { mainWindow.show(); mainWindow.focus(); }
+}
+
+function refreshTray() {
+  if (!tray) return;
+  tray.setToolTip(`Prompt Pop - ${activityLabel}`);
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: `状态：${activityLabel}`, enabled: false },
+    { type: 'separator' },
+    { label: '显示 Prompt Pop', click: showMainWindow },
+    { label: '退出', click: () => { isQuitting = true; app.quit(); } }
+  ]));
 }
 
 app.whenReady().then(() => {
+  tray = new Tray(path.join(__dirname, 'icon.ico'));
+  refreshTray();
+  tray.on('click', showMainWindow);
   ipcMain.handle('prompt-pop:request', (_, payload) => createRequest(payload));
+  ipcMain.on('prompt-pop:activity', (_, active) => { activityLabel = active ? '正在生成' : '待命'; refreshTray(); });
   ipcMain.handle('prompt-pop:save-image', async (_, source, filename) => {
     const filePath = path.join(app.getPath('pictures'), 'Prompt Pop', filename);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -73,7 +101,7 @@ app.whenReady().then(() => {
     return fs.readFile(result.filePaths[0], 'utf8');
   });
   createWindow();
-  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+  app.on('activate', showMainWindow);
 });
 
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('before-quit', () => { isQuitting = true; });
