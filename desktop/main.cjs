@@ -83,6 +83,7 @@ app.whenReady().then(() => {
   refreshTray();
   tray.on('click', showMainWindow);
   ipcMain.handle('prompt-pop:request', (_, payload) => createRequest(payload));
+  ipcMain.handle('prompt-pop:version', () => app.getVersion());
   ipcMain.on('prompt-pop:activity', (_, active) => { activityLabel = active ? '正在生成' : '待命'; refreshTray(); });
   ipcMain.handle('prompt-pop:save-image', async (_, source, filename) => {
     const filePath = path.join(app.getPath('pictures'), 'Prompt Pop', filename);

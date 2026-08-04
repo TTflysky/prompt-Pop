@@ -5,5 +5,6 @@ contextBridge.exposeInMainWorld('PromptPopDesktop', {
   saveImage: (source, filename) => ipcRenderer.invoke('prompt-pop:save-image', source, filename),
   saveText: (text, filename) => ipcRenderer.invoke('prompt-pop:save-text', text, filename),
   pickConfig: () => ipcRenderer.invoke('prompt-pop:pick-config'),
+  getVersion: () => ipcRenderer.invoke('prompt-pop:version'),
   setActivity: active => ipcRenderer.send('prompt-pop:activity', Boolean(active))
 });

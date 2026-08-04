@@ -7,8 +7,8 @@ Prompt Pop! is a comic-inspired AI prompt workbench for Android, Windows, and br
 - **Android:** `PromptPop-v1.2.33.apk`
   - Install over an existing Prompt Pop installation to keep local settings and history.
   - This APK adds reliable Android system clipboard support for error logs and all prompt-copy actions.
-- **Windows:** `release/Prompt-Pop-Windows-v1.2.37.zip`
-  - Extract it and run `Prompt Pop 1.2.37.exe`. No installation is required.
+- **Windows:** `release/Prompt-Pop-Windows-v1.2.39.zip`
+  - Extract it and run `Prompt Pop 1.2.39.exe`. No installation is required.
 
 ## Main Features
 

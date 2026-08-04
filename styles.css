@@ -122,6 +122,12 @@ dialog { width: min(440px, calc(100% - 30px)); padding: 0; color: var(--ink); ba
 .image-preview-dialog { width: min(960px, calc(100% - 24px)); max-height: calc(100dvh - 24px); padding: 18px; overflow: auto; }
 .image-preview-dialog::backdrop { background: rgba(0, 0, 0, .75); }
 .image-preview-dialog img { display: block; width: 100%; max-height: calc(100dvh - 100px); object-fit: contain; background: #111; }
+/* The result panel can be narrow even on a wide desktop in the two-column lab. */
+.image-result-panel .panel-footer { height: auto; min-height: 77px; flex-wrap: wrap; align-content: center; }
+.image-result-panel .panel-footer > * { flex: 1 1 155px; min-width: 0; }
+@media (min-width: 601px) {
+  .section-tabs { position: relative; top: auto; }
+}
 /* Windows display scaling can make the desktop window visually narrow while it is
    still above the mobile breakpoint. Keep the result panel from clipping actions. */
 @media (max-width: 1180px) {
