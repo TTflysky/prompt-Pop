@@ -6,13 +6,18 @@ Prompt Pop! is a comic-inspired prompt workbench for three separate AI workflows
 - Image prompt generation, text-to-image, and image-to-image
 - Reference-image visual breakdown and reusable prompt extraction
 
+## Downloads
+
+- **Android:** `PromptPop-v1.2.32.apk` - install over the existing app to keep local configuration.
+- **Windows:** `release/Prompt-Pop-Windows-v1.2.36.zip` - extract the ZIP and run `Prompt Pop 1.2.36.exe`; no installation is required.
+
 ## Local use
 
 Open `index.html` in a browser.
 
 ## Windows desktop app
 
-The portable Windows build is generated with `npm.cmd run build:win` and is written to `release/Prompt Pop 1.2.35.exe`.
+The portable Windows build is generated with `npm.cmd run build:win` and is written to `release/Prompt Pop 1.2.36.exe`.
 
 On first use, export the configuration TXT from the Android app and import it from the desktop app settings. The three model configurations are then stored locally on the PC. The TXT contains API keys, so keep it private.
 

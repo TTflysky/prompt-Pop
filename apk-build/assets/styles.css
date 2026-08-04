@@ -45,6 +45,8 @@ dialog { width: min(440px, calc(100% - 30px)); padding: 0; color: var(--ink); ba
 @media (max-width: 600px) { .frame-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }.frame-option { min-height: 76px; font-size: 10px; }.frame-swatch { height: 40px; } }
 @media (max-width: 390px) { .reference-image-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .breakdown-only-body { height: clamp(430px, 62dvh, 720px) !important; display: block; }.breakdown-only-body pre { min-height: 0; height: 100% !important; max-height: none !important; }
+.dragging-file { background: #bdefff !important; outline: 4px solid var(--blue); outline-offset: 3px; transform: translateY(-1px); }
+.icon-button.red { background: var(--red); color: #fff; font-weight: 900; }.error-log-dialog { width: min(760px, calc(100% - 30px)); max-height: calc(100dvh - 30px); overflow: auto; padding: 23px; }.error-log-actions { display: flex; gap: 9px; margin: -8px 0 14px; }.error-log-actions .soft-button { flex: 1; }.error-log-list { display: grid; gap: 10px; }.error-log-entry { padding: 12px; background: #fff0ef; border: 3px solid var(--ink); border-radius: 11px; }.error-log-entry strong, .error-log-entry small { display: block; }.error-log-entry small { margin-top: 4px; color: #765e5a; }.error-log-entry pre { max-height: 190px; overflow: auto; margin: 10px 0 0; padding: 10px; color: #241d1b; background: #fffdf8; border: 2px solid var(--ink); border-radius: 7px; white-space: pre-wrap; word-break: break-word; font: 12px/1.45 'DM Mono', Consolas, monospace; }
 @media (max-width: 600px) {
   body { min-width: 0; overflow-x: hidden; }
   .topbar { min-height: 70px; height: auto; padding: 12px 14px; gap: 12px; }

@@ -36,7 +36,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.31';
+const APP_VERSION = '1.2.32';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -264,10 +264,11 @@ function parseConfigBackup(text) {
 $('#exportConfigButton').addEventListener('click', async () => {
   const text = getConfigBackupText(); const filename = `prompt-pop-config-${new Date().toISOString().slice(0, 10)}.txt`;
   try {
-    if (window.PromptPopDesktop?.saveText) await window.PromptPopDesktop.saveText(text, filename);
+    let savedPath = '';
+    if (window.PromptPopDesktop?.saveText) savedPath = await window.PromptPopDesktop.saveText(text, filename);
     else if (window.PromptPopNative?.saveTextFile) await new Promise((resolve, reject) => { const id = `config-${Date.now()}-${Math.random().toString(16).slice(2)}`; nativeTextSaveRequests.set(id, { resolve, reject }); window.PromptPopNative.saveTextFile(id, text, filename); });
     else { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' })); link.download = filename; document.body.append(link); link.click(); link.remove(); }
-    showToast('配置 TXT 已导出到下载目录');
+    showToast(savedPath ? `配置 TXT 已导出：${savedPath}` : '配置 TXT 已导出到下载目录');
   } catch (error) { showToast(`导出失败：${error.message}`); }
 });
 $('#importConfigInput').addEventListener('change', event => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const configs = parseConfigBackup(String(reader.result || '')); localStorage.setItem('prompt-pop-settings', JSON.stringify(configs)); localStorage.setItem('prompt-pop-key', configs.text.apiKey); loadSettings(); showToast('配置已导入，请点击保存设置'); } catch (error) { showToast(`导入失败：${error.message}`); } finally { event.target.value = ''; } }; reader.readAsText(file, 'UTF-8'); });

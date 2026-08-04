@@ -91,7 +91,13 @@ app.whenReady().then(() => {
     return filePath;
   });
   ipcMain.handle('prompt-pop:save-text', async (_, text, filename) => {
-    const filePath = path.join(app.getPath('downloads'), filename);
+    const result = await dialog.showSaveDialog({
+      title: '导出 Prompt Pop 配置',
+      defaultPath: path.join(app.getPath('downloads'), filename),
+      filters: [{ name: 'Text file', extensions: ['txt'] }]
+    });
+    if (result.canceled || !result.filePath) throw new Error('已取消导出');
+    const filePath = result.filePath;
     await fs.writeFile(filePath, text, 'utf8');
     return filePath;
   });
