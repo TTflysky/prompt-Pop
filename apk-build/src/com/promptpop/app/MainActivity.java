@@ -5,6 +5,7 @@ import android.Manifest;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
@@ -140,6 +141,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void saveTextFile(final String requestId, final String text, final String filename) {
             new Thread(() -> MainActivity.this.saveTextFile(requestId, text, filename)).start();
+        }
+
+        @JavascriptInterface
+        public void getLastGeneratedImage(final String requestId) {
+            new Thread(() -> MainActivity.this.getLastGeneratedImage(requestId)).start();
         }
 
     }
@@ -308,8 +314,16 @@ public class MainActivity extends Activity {
             InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
             String responseBody = readStream(stream);
             if (status >= 200 && status < 300 && (url.getPath().endsWith("/images/generations") || url.getPath().endsWith("/images/edits"))) {
-                boolean saved = autoSaveGeneratedImage(responseBody);
-                GenerationService.notifyCompleted(MainActivity.this, saved);
+                String savedUri = autoSaveGeneratedImage(responseBody);
+                if (savedUri != null) {
+                    String kind = url.getPath().endsWith("/images/edits") ? "image-to-image" : "text-to-image";
+                    getSharedPreferences("promptpop", MODE_PRIVATE).edit()
+                        .putString("last-generated-uri", savedUri)
+                        .putString("last-generated-kind", kind)
+                        .putLong("last-generated-at", System.currentTimeMillis())
+                        .apply();
+                }
+                GenerationService.notifyCompleted(MainActivity.this, savedUri != null);
             }
             sendResult(requestId, status, responseBody, "");
         } catch (Exception error) {
@@ -372,20 +386,35 @@ public class MainActivity extends Activity {
         }
     }
 
-    private boolean autoSaveGeneratedImage(String responseBody) {
+    private String autoSaveGeneratedImage(String responseBody) {
         try {
             JSONObject response = new JSONObject(responseBody);
             JSONArray data = response.optJSONArray("data");
             JSONObject image = data == null ? null : data.optJSONObject(0);
-            if (image == null) return false;
+            if (image == null) return null;
             String source = image.optString("b64_json");
             if (!source.isEmpty()) source = "data:image/png;base64," + source;
             if (source.isEmpty()) source = image.optString("url");
-            if (source.isEmpty()) return false;
-            writeImageToGallery(source, "prompt-pop-auto-" + System.currentTimeMillis() + ".png");
-            return true;
+            if (source.isEmpty()) return null;
+            return writeImageToGallery(source, "prompt-pop-auto-" + System.currentTimeMillis() + ".png").toString();
         } catch (Exception ignored) {
-            return false;
+            return null;
+        }
+    }
+
+    private void getLastGeneratedImage(String requestId) {
+        try {
+            SharedPreferences preferences = getSharedPreferences("promptpop", MODE_PRIVATE);
+            String uriText = preferences.getString("last-generated-uri", "");
+            String kind = preferences.getString("last-generated-kind", "text-to-image");
+            if (uriText.isEmpty()) { sendLastGeneratedImageResult(requestId, kind, "", ""); return; }
+            // MediaStore owns this URI for the app, so it survives WebView recreation without a large JS payload.
+            InputStream input = getContentResolver().openInputStream(Uri.parse(uriText));
+            if (input == null) throw new IllegalStateException("Unable to read the saved image");
+            input.close();
+            sendLastGeneratedImageResult(requestId, kind, uriText, "");
+        } catch (Exception error) {
+            sendLastGeneratedImageResult(requestId, "", "", error.getMessage() == null ? "Unable to restore the saved image" : error.getMessage());
         }
     }
 
@@ -456,6 +485,14 @@ public class MainActivity extends Activity {
             String mimeType = header.substring(5, header.indexOf(';'));
             return new ImageData(Base64.decode(source.substring(separator + 1), Base64.DEFAULT), mimeType);
         }
+        if (source.startsWith("content://")) {
+            Uri uri = Uri.parse(source);
+            InputStream input = getContentResolver().openInputStream(uri);
+            if (input == null) throw new IllegalArgumentException("Unable to read saved image");
+            String mimeType = getContentResolver().getType(uri);
+            if (mimeType == null || !mimeType.startsWith("image/")) mimeType = "image/png";
+            return new ImageData(readBytes(input), mimeType);
+        }
         URL url = new URL(source);
         if (!"https".equalsIgnoreCase(url.getProtocol())) throw new IllegalArgumentException("Only HTTPS image URLs can be saved");
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -488,6 +525,11 @@ public class MainActivity extends Activity {
 
     private void sendSaveTextResult(String requestId, String uri, String error) {
         String script = "window.__nativeSaveTextResponse(" + JSONObject.quote(requestId) + "," + JSONObject.quote(uri) + "," + JSONObject.quote(error) + ");";
+        runOnUiThread(() -> webView.evaluateJavascript(script, null));
+    }
+
+    private void sendLastGeneratedImageResult(String requestId, String kind, String source, String error) {
+        String script = "window.__nativeLastGeneratedImageResponse(" + JSONObject.quote(requestId) + "," + JSONObject.quote(kind) + "," + JSONObject.quote(source) + "," + JSONObject.quote(error) + ");";
         runOnUiThread(() -> webView.evaluateJavascript(script, null));
     }
 

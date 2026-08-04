@@ -35,7 +35,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.30';
+const APP_VERSION = '1.2.31';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -93,6 +93,7 @@ async function copyText(text) {
 const nativeRequests = new Map();
 const nativeSaveRequests = new Map();
 const nativeTextSaveRequests = new Map();
+const nativeLastImageRequests = new Map();
 window.__nativeApiResponse = (id, status, body, error) => {
   const request = nativeRequests.get(id); if (!request) return; nativeRequests.delete(id);
   if (error) return request.reject(new Error(error));
@@ -104,6 +105,10 @@ window.__nativeSaveImageResponse = (id, uri, error) => {
   request.resolve(uri);
 };
 window.__nativeSaveTextResponse = (id, uri, error) => { const request = nativeTextSaveRequests.get(id); if (!request) return; nativeTextSaveRequests.delete(id); if (error) return request.reject(new Error(error)); request.resolve(uri); };
+window.__nativeLastGeneratedImageResponse = (id, kind, source, error) => {
+  const request = nativeLastImageRequests.get(id); if (!request) return; nativeLastImageRequests.delete(id);
+  if (error) return request.reject(new Error(error)); request.resolve({ kind, source });
+};
 window.__nativeUpdateResponse = (id, status, body, error) => {
   const request = updateRequests.get(id); if (!request) return; updateRequests.delete(id);
   if (error) return request.reject(new Error(error));
@@ -300,6 +305,7 @@ let imageGenerateMode = 'text';
 let imageFile = null;
 let imageReferenceData = '';
 let generatedImageUrl = '';
+let lastGenerationKind = '';
 function setImageGenerateMode(mode) { imageGenerateMode = mode; document.querySelectorAll('[data-generate-mode]').forEach(item => item.classList.toggle('active', item.dataset.generateMode === mode)); $('#generateImageButton').innerHTML = mode === 'image' ? '⌁ <span>图生图</span>' : '✦ <span>文生图</span>'; }
 document.querySelectorAll('[data-generate-mode]').forEach(button => button.addEventListener('click', () => setImageGenerateMode(button.dataset.generateMode)));
 $('#imageUpload').addEventListener('change', event => {
@@ -340,7 +346,7 @@ async function generateImage() {
       response = await apiRequest(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: imageModel, prompt: imagePrompt.value, size: $('#imageSize').value }) });
     }
     if (!response.ok) { const errorBody = await response.text(); throw new Error(`HTTP ${response.status} ${errorBody.slice(0, 180)}`); }
-    const data = await response.json(); const image = data.data?.[0];
+    const data = await response.json(); const image = data.data?.[0]; lastGenerationKind = imageGenerateMode === 'image' ? 'image-to-image' : 'text-to-image';
     generatedImageUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || '';
     if (!generatedImageUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247');
     $('#imageOutput').innerHTML = `<img src="${generatedImageUrl}" alt="生成结果" />`; $('#saveTextToImageButton').disabled = false; queueWorkspacePersist(); showToast('\u56fe\u7247\u751f\u6210\u5b8c\u6210');
@@ -429,7 +435,7 @@ async function generateDirectI2I() {
   if (!config.apiKey || !config.baseUrl || !config.model) { settingsDialog.showModal(); showToast('\u8bf7\u5148\u914d\u7f6e\u751f\u56fe\u6a21\u578b'); return; }
   const button = $('#generateDirectI2IButton'); directI2IResultUrl = ''; $('#saveDirectI2IButton').disabled = true; button.disabled = true; button.innerHTML = '\u2026 <span>\u56fe\u751f\u56fe\u4e2d</span>';
   try {
-    const fullPrompt = `${buildI2IPrompt(prompt, $('#directI2IStyle').value, $('#directI2IPoseStrength').value, $('#directI2IStrength').value, $('#directI2INegative').value)} ${directI2IFiles.length > 1 ? `Multiple numbered reference images are attached. Their roles are defined entirely by the user's prompt. Follow the explicit references to image 1, image 2, and so on; do not assume that any image is a person, subject, style, or composition anchor.` : ''}`.trim();
+    const fullPrompt = `${buildI2IPrompt(prompt, $('#directI2IStyle').value, $('#directI2IPoseStrength').value, $('#directI2IStrength').value, $('#directI2INegative').value)} ${directI2IFiles.length > 1 ? `Multiple numbered reference images are attached. Their roles are defined entirely by the user's prompt. Follow the explicit references to image 1, image 2, and so on; do not assume that any image is a person, subject, style, or composition anchor.` : ''}`.trim(); lastGenerationKind = 'image-to-image';
     const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); form.append('size', $('#directI2ISize').value); directI2IFiles.forEach(file => form.append('image', file, file.name)); appendImageReferenceFidelity(form, config, config.model);
     const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/images/edits`, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     if (!response.ok) { const detail = await response.text(); throw new Error(`HTTP ${response.status} ${detail.slice(0, 180)}`); }
@@ -668,6 +674,7 @@ $('#directI2IOutput').addEventListener('click', event => { if (event.target.tagN
 $('#closeImagePreview').addEventListener('click', () => $('#imagePreviewDialog').close());
 const WORKSPACE_DB_NAME = 'prompt-pop-workspace';
 const WORKSPACE_STATE_KEY = 'latest-workspace';
+const WORKSPACE_LOCAL_KEY = 'prompt-pop-workspace-latest';
 let workspacePersistTimer = 0;
 function openWorkspaceDb() {
   return new Promise((resolve, reject) => {
@@ -702,9 +709,66 @@ async function restoreWorkspaceState() {
     updateCount();
   } catch { /* A missing or unavailable cache should not block the workspace. */ }
 }
+function collectWorkspaceState() {
+  const ids = ['rawInput', 'optimizedOutput', 'imagePrompt', 'negativePrompt', 'imageSubject', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'directI2IPrompt', 'directI2ISize', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative', 'breakdownResult'];
+  const values = {};
+  ids.forEach(id => { const element = $(`#${id}`); if (element) values[id] = 'value' in element ? element.value : element.textContent; });
+  return { values, imageGenerateMode, generatedImageUrl, directI2IResultUrl, lastGenerationKind, savedAt: Date.now() };
+}
+function saveWorkspaceFallback(state) {
+  try {
+    // Large data URLs are kept in IndexedDB; Android has a durable gallery copy for recovery.
+    const fallback = { ...state, generatedImageUrl: state.generatedImageUrl.startsWith('data:') ? '' : state.generatedImageUrl, directI2IResultUrl: state.directI2IResultUrl.startsWith('data:') ? '' : state.directI2IResultUrl };
+    localStorage.setItem(WORKSPACE_LOCAL_KEY, JSON.stringify(fallback));
+  } catch { /* Storage quota must not interrupt editing. */ }
+}
+function queueWorkspacePersist() { clearTimeout(workspacePersistTimer); workspacePersistTimer = setTimeout(() => { persistWorkspaceState(); }, 180); }
+async function persistWorkspaceState() {
+  const state = collectWorkspaceState();
+  saveWorkspaceFallback(state);
+  try {
+    const db = await openWorkspaceDb(); await workspaceWrite(db, WORKSPACE_STATE_KEY, state); db.close();
+  } catch { /* IndexedDB is optional on Android local-file WebViews. */ }
+}
+function renderRecoveredImage(kind, source) {
+  if (!source) return;
+  if (kind === 'image-to-image') {
+    directI2IResultUrl = source; $('#directI2IOutput').innerHTML = `<img src="${source}" alt="image-to-image result" />`; $('#saveDirectI2IButton').disabled = false;
+  } else {
+    generatedImageUrl = source; $('#imageOutput').innerHTML = `<img src="${source}" alt="generated result" />`; $('#saveTextToImageButton').disabled = false;
+  }
+}
+function requestLastGeneratedImage() {
+  if (!window.PromptPopNative?.getLastGeneratedImage) return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    const id = `last-image-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    nativeLastImageRequests.set(id, { resolve, reject }); window.PromptPopNative.getLastGeneratedImage(id);
+  });
+}
+async function restoreWorkspaceState() {
+  let state = null;
+  try { const db = await openWorkspaceDb(); state = await workspaceRead(db, WORKSPACE_STATE_KEY); db.close(); } catch { /* Fall back below. */ }
+  try {
+    const fallback = JSON.parse(localStorage.getItem(WORKSPACE_LOCAL_KEY) || 'null');
+    if (!state || (fallback && fallback.savedAt > (state.savedAt || 0))) state = fallback;
+  } catch { /* Ignore malformed old data. */ }
+  if (state) {
+    Object.entries(state.values || {}).forEach(([id, value]) => { const element = $(`#${id}`); if (!element) return; if ('value' in element) element.value = value; else element.textContent = value; });
+    setImageGenerateMode(state.imageGenerateMode || 'text'); lastGenerationKind = state.lastGenerationKind || '';
+    if (state.generatedImageUrl) renderRecoveredImage('text-to-image', state.generatedImageUrl);
+    if (state.directI2IResultUrl) renderRecoveredImage('image-to-image', state.directI2IResultUrl);
+  }
+  try {
+    const nativeImage = await requestLastGeneratedImage();
+    if (nativeImage?.source) { lastGenerationKind = nativeImage.kind || lastGenerationKind || 'text-to-image'; renderRecoveredImage(lastGenerationKind, nativeImage.source); queueWorkspacePersist(); }
+  } catch { /* A deleted gallery image should not block the page. */ }
+  ['lensSlider', 'detailSlider', 'styleSlider', 'directI2IPoseStrength', 'directI2IStrength'].forEach(id => $(`#${id}`).dispatchEvent(new Event('input')));
+  updateCount();
+}
 document.addEventListener('input', event => { if (!event.target.closest('#settingsDialog')) queueWorkspacePersist(); });
 document.addEventListener('change', event => { if (!event.target.closest('#settingsDialog')) queueWorkspacePersist(); });
-window.addEventListener('pagehide', persistWorkspaceState);
+window.addEventListener('pagehide', () => { saveWorkspaceFallback(collectWorkspaceState()); persistWorkspaceState(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { saveWorkspaceFallback(collectWorkspaceState()); persistWorkspaceState(); } });
 restoreWorkspaceState().finally(() => { if (!imagePrompt.value) buildImagePrompt(); });
 
 async function optimize() {
