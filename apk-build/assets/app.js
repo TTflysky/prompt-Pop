@@ -36,7 +36,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.32';
+const APP_VERSION = '1.2.33';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -104,6 +104,13 @@ function renderErrorLogs() {
 }
 async function copyText(text) {
   if (!text) return false;
+  if (window.PromptPopNative?.copyText) {
+    try {
+      const id = `clipboard-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      await new Promise((resolve, reject) => { nativeClipboardRequests.set(id, { resolve, reject }); window.PromptPopNative.copyText(id, text); });
+      return true;
+    } catch { /* Fall through to the browser clipboard fallback. */ }
+  }
   try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } } catch { /* Android WebView often blocks the modern clipboard API for local files. */ }
   const field = document.createElement('textarea'); field.value = text; field.setAttribute('readonly', ''); field.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;'; document.body.append(field); field.focus(); field.select();
   const copied = document.execCommand('copy'); field.remove(); return copied;
@@ -111,6 +118,7 @@ async function copyText(text) {
 const nativeRequests = new Map();
 const nativeSaveRequests = new Map();
 const nativeTextSaveRequests = new Map();
+const nativeClipboardRequests = new Map();
 const nativeLastImageRequests = new Map();
 let desktopActivityCount = 0;
 window.__nativeApiResponse = (id, status, body, error) => {
@@ -125,6 +133,7 @@ window.__nativeSaveImageResponse = (id, uri, error) => {
   request.resolve(uri);
 };
 window.__nativeSaveTextResponse = (id, uri, error) => { const request = nativeTextSaveRequests.get(id); if (!request) return; nativeTextSaveRequests.delete(id); if (error) return request.reject(new Error(error)); request.resolve(uri); };
+window.__nativeClipboardResponse = (id, error) => { const request = nativeClipboardRequests.get(id); if (!request) return; nativeClipboardRequests.delete(id); if (error) return request.reject(new Error(error)); request.resolve(); };
 window.__nativeLastGeneratedImageResponse = (id, kind, source, error) => {
   const request = nativeLastImageRequests.get(id); if (!request) return; nativeLastImageRequests.delete(id);
   if (error) return request.reject(new Error(error)); request.resolve({ kind, source });

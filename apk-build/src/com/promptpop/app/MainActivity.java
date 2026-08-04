@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.Manifest;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -141,6 +143,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void saveTextFile(final String requestId, final String text, final String filename) {
             new Thread(() -> MainActivity.this.saveTextFile(requestId, text, filename)).start();
+        }
+
+        @JavascriptInterface
+        public void copyText(final String requestId, final String text) {
+            MainActivity.this.copyText(requestId, text);
         }
 
         @JavascriptInterface
@@ -526,6 +533,24 @@ public class MainActivity extends Activity {
     private void sendSaveTextResult(String requestId, String uri, String error) {
         String script = "window.__nativeSaveTextResponse(" + JSONObject.quote(requestId) + "," + JSONObject.quote(uri) + "," + JSONObject.quote(error) + ");";
         runOnUiThread(() -> webView.evaluateJavascript(script, null));
+    }
+
+    private void copyText(String requestId, String text) {
+        runOnUiThread(() -> {
+            try {
+                ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                if (clipboard == null) throw new IllegalStateException("Clipboard service unavailable");
+                clipboard.setPrimaryClip(ClipData.newPlainText("Prompt Pop", text == null ? "" : text));
+                sendClipboardResult(requestId, "");
+            } catch (Exception error) {
+                sendClipboardResult(requestId, error.getMessage() == null ? "Unable to copy text" : error.getMessage());
+            }
+        });
+    }
+
+    private void sendClipboardResult(String requestId, String error) {
+        String script = "window.__nativeClipboardResponse(" + JSONObject.quote(requestId) + "," + JSONObject.quote(error) + ");";
+        webView.evaluateJavascript(script, null);
     }
 
     private void sendLastGeneratedImageResult(String requestId, String kind, String source, String error) {
