@@ -137,6 +137,18 @@ async function applyHotUpdate() {
 }
 function readFileDataUrl(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('Unable to read selected image')); reader.readAsDataURL(file); }); }
 async function apiRequest(url, options = {}) {
+  if (window.PromptPopDesktop?.request) {
+    const headers = options.headers || {}; let bodyType = 'none'; let body = ''; const fields = [];
+    if (options.body instanceof FormData) {
+      bodyType = 'multipart';
+      for (const [name, value] of options.body.entries()) {
+        if (value instanceof Blob) fields.push({ name, fileName: value.name || 'upload.png', mimeType: value.type || 'image/png', fileData: await readFileDataUrl(value) });
+        else fields.push({ name, value: String(value) });
+      }
+    } else if (typeof options.body === 'string') { bodyType = 'json'; body = options.body; }
+    const result = await window.PromptPopDesktop.request(JSON.stringify({ url, method: options.method || 'GET', headers, bodyType, body, fields }));
+    return { ok: result.status >= 200 && result.status < 300, status: result.status, json: async () => JSON.parse(result.body || '{}'), text: async () => result.body || '' };
+  }
   if (!window.PromptPopNative?.request) return fetch(url, options);
   const headers = options.headers || {}; let bodyType = 'none'; let body = ''; let fields = [];
   if (options.body instanceof FormData) {
@@ -217,7 +229,8 @@ function parseConfigBackup(text) {
 $('#exportConfigButton').addEventListener('click', async () => {
   const text = getConfigBackupText(); const filename = `prompt-pop-config-${new Date().toISOString().slice(0, 10)}.txt`;
   try {
-    if (window.PromptPopNative?.saveTextFile) await new Promise((resolve, reject) => { const id = `config-${Date.now()}-${Math.random().toString(16).slice(2)}`; nativeTextSaveRequests.set(id, { resolve, reject }); window.PromptPopNative.saveTextFile(id, text, filename); });
+    if (window.PromptPopDesktop?.saveText) await window.PromptPopDesktop.saveText(text, filename);
+    else if (window.PromptPopNative?.saveTextFile) await new Promise((resolve, reject) => { const id = `config-${Date.now()}-${Math.random().toString(16).slice(2)}`; nativeTextSaveRequests.set(id, { resolve, reject }); window.PromptPopNative.saveTextFile(id, text, filename); });
     else { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' })); link.download = filename; document.body.append(link); link.click(); link.remove(); }
     showToast('配置 TXT 已导出到下载目录');
   } catch (error) { showToast(`导出失败：${error.message}`); }
@@ -649,6 +662,10 @@ $('#exportFramedButton').addEventListener('click', async () => { const item = pe
 async function saveGeneratedImage(url, kind) {
   if (!url) return showToast('请先生成图片');
   const filename = makeImageFilename(kind);
+  if (window.PromptPopDesktop?.saveImage) {
+    try { await window.PromptPopDesktop.saveImage(url, filename); showToast('已保存到图片/Prompt Pop'); return; }
+    catch (error) { showToast(`保存到电脑失败：${error.message}`); return; }
+  }
   if (window.PromptPopNative?.saveImageToGallery) {
     const id = `save-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     try {

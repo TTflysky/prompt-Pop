@@ -13,3 +13,7 @@ apk-build/aligned.apk
 apkbuild/
 icon-no-black-border.png
 remove_icon_border.ps1
+
+# Desktop build artifacts
+node_modules/
+release/
