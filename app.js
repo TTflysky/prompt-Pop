@@ -36,7 +36,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.33';
+const APP_VERSION = '1.2.34';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -124,7 +124,6 @@ let desktopActivityCount = 0;
 window.__nativeApiResponse = (id, status, body, error) => {
   const request = nativeRequests.get(id); if (!request) return; nativeRequests.delete(id);
   if (error) { recordApiError({ url: request.url, detail: error, source: 'Android native' }); return request.reject(new Error(error)); }
-  if (status < 200 || status >= 300) recordApiError({ url: request.url, status, detail: body, source: 'Android native' });
   request.resolve({ ok: status >= 200 && status < 300, status, json: async () => JSON.parse(body || '{}'), text: async () => body || '' });
 };
 window.__nativeSaveImageResponse = (id, uri, error) => {
@@ -202,8 +201,20 @@ async function apiRequest(url, options = {}) {
       else fields.push({ name, value: String(value) });
     }
   } else if (typeof options.body === 'string') { bodyType = 'json'; body = options.body; }
-  const id = `request-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  return new Promise((resolve, reject) => { nativeRequests.set(id, { resolve, reject, url }); window.PromptPopNative.request(id, JSON.stringify({ url, method: options.method || 'GET', headers, bodyType, body, fields })); });
+  const nativePayload = { url, method: options.method || 'GET', headers, bodyType, body, fields };
+  const retryableChatRequest = /\/chat\/completions(?:$|[?#])/i.test(url);
+  const retryDelays = [2500, 6500];
+  for (let attempt = 0; ; attempt += 1) {
+    const id = `request-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const response = await new Promise((resolve, reject) => { nativeRequests.set(id, { resolve, reject, url }); window.PromptPopNative.request(id, JSON.stringify(nativePayload)); });
+    const retryableFailure = [429, 502, 503].includes(response.status);
+    if (!retryableChatRequest || !retryableFailure || attempt >= retryDelays.length) {
+      if (!response.ok) recordApiError({ url, status: response.status, detail: await response.text(), source: 'Android native' });
+      return response;
+    }
+    showToast(`服务繁忙，${Math.ceil(retryDelays[attempt] / 1000)} 秒后自动重试 ${attempt + 1}/2`);
+    await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+  }
 }
 function getModeLabel() { return modes.find(mode => mode.id === selectedMode)?.title || '\u4e13\u4e1a\u7cbe\u51c6\u578b'; }
 function getConfigs() {
