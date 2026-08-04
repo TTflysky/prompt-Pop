@@ -17,6 +17,7 @@
         </div>
       </div>
       <div class="toolbar">
+        <button class="icon-button red" id="errorLogButton" title="Error log" aria-label="Error log">!</button>
         <button class="icon-button" id="historyButton" title="查看历史记录" aria-label="查看历史记录">◴</button>
         <button class="icon-button" id="themeButton" title="切换明暗主题" aria-label="切换明暗主题">◔</button>
         <button class="icon-button" id="soundButton" title="切换交互音效" aria-label="切换交互音效">♫</button>
@@ -197,6 +198,7 @@
     </dialog>
     <dialog class="frame-dialog" id="frameDialog"><div class="dialog-top"><span>CHOOSE A FRAME</span><button class="close-button" id="closeFrameDialog" type="button" aria-label="关闭">×</button></div><div class="frame-live-preview" id="frameLivePreview"><img id="framePreviewImage" alt="相框导出预览" /><div><strong id="framePreviewTitle">经典黑边</strong><span>PREVIEW EXPORT</span></div></div><div class="frame-grid" id="frameGrid"></div><div class="frame-actions"><button class="soft-button" id="exportOriginalButton" type="button">无相框保存</button><button class="action-button green" id="exportFramedButton" type="button">保存选中相框</button></div></dialog>
 
+    <dialog class="error-log-dialog" id="errorLogDialog"><div class="dialog-top"><span>ERROR LOG</span><button class="close-button" id="closeErrorLog" type="button" aria-label="Close">×</button></div><div class="error-log-actions"><button class="soft-button" id="copyErrorLog" type="button">复制日志</button><button class="soft-button" id="clearErrorLog" type="button">清空</button></div><div class="error-log-list" id="errorLogList"></div></dialog>
     <script src="app.js"></script>
   </body>
 </html>

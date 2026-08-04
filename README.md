@@ -12,7 +12,7 @@ Open `index.html` in a browser.
 
 ## Windows desktop app
 
-The portable Windows build is generated with `npm.cmd run build:win` and is written to `release/Prompt Pop 1.2.34.exe`.
+The portable Windows build is generated with `npm.cmd run build:win` and is written to `release/Prompt Pop 1.2.35.exe`.
 
 On first use, export the configuration TXT from the Android app and import it from the desktop app settings. The three model configurations are then stored locally on the PC. The TXT contains API keys, so keep it private.
 

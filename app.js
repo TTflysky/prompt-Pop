@@ -22,6 +22,7 @@ const inputCount = $('#inputCount');
 const outputCount = $('#outputCount');
 const settingsDialog = $('#settingsDialog');
 const historyDialog = $('#historyDialog');
+const errorLogDialog = $('#errorLogDialog');
 const toast = $('#toast');
 const textProviderInput = $('#textProvider');
 const textBaseUrlInput = $('#textBaseUrl');
@@ -42,6 +43,7 @@ let availableUpdate;
 let selectedMode = localStorage.getItem('prompt-pop-mode') || 'pro';
 let lastResult = '';
 let history = JSON.parse(localStorage.getItem('prompt-pop-history') || '[]');
+let errorLogs = JSON.parse(localStorage.getItem('prompt-pop-error-log') || '[]');
 let soundEnabled = localStorage.getItem('prompt-pop-sound') !== 'off';
 let soundPreset = localStorage.getItem('prompt-pop-sound-preset') || 'fc';
 let soundVolume = Number(localStorage.getItem('prompt-pop-sound-volume') || 80);
@@ -84,6 +86,22 @@ function playSound(type = 'click') {
   });
 }
 function showToast(message) { toast.textContent = message; toast.classList.add('show'); playSound(/失败|错误/.test(message) ? 'error' : /完成|成功|已保存|已复制/.test(message) ? 'success' : 'click'); clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove('show'), 2200); }
+function cleanErrorDetail(value) { return String(value || '').replace(/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [redacted]').slice(0, 5000); }
+function recordApiError({ url = '', status = 0, detail = '', source = 'API' }) {
+  const entry = { time: new Date().toLocaleString('zh-CN'), source, status, url: String(url).split('?')[0], detail: cleanErrorDetail(detail) || 'No error body returned.' };
+  errorLogs.unshift(entry); errorLogs = errorLogs.slice(0, 30); localStorage.setItem('prompt-pop-error-log', JSON.stringify(errorLogs));
+}
+function renderErrorLogs() {
+  const list = $('#errorLogList'); list.replaceChildren();
+  if (!errorLogs.length) { const empty = document.createElement('p'); empty.className = 'muted'; empty.textContent = '暂无错误日志。'; list.append(empty); return; }
+  errorLogs.forEach(entry => {
+    const item = document.createElement('article'); item.className = 'error-log-entry';
+    const title = document.createElement('strong'); title.textContent = `${entry.source} · HTTP ${entry.status || 'NETWORK'}`;
+    const meta = document.createElement('small'); meta.textContent = `${entry.time} · ${entry.url || 'No endpoint'}`;
+    const detail = document.createElement('pre'); detail.textContent = entry.detail;
+    item.append(title, meta, detail); list.append(item);
+  });
+}
 async function copyText(text) {
   if (!text) return false;
   try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } } catch { /* Android WebView often blocks the modern clipboard API for local files. */ }
@@ -97,7 +115,8 @@ const nativeLastImageRequests = new Map();
 let desktopActivityCount = 0;
 window.__nativeApiResponse = (id, status, body, error) => {
   const request = nativeRequests.get(id); if (!request) return; nativeRequests.delete(id);
-  if (error) return request.reject(new Error(error));
+  if (error) { recordApiError({ url: request.url, detail: error, source: 'Android native' }); return request.reject(new Error(error)); }
+  if (status < 200 || status >= 300) recordApiError({ url: request.url, status, detail: body, source: 'Android native' });
   request.resolve({ ok: status >= 200 && status < 300, status, json: async () => JSON.parse(body || '{}'), text: async () => body || '' });
 };
 window.__nativeSaveImageResponse = (id, uri, error) => {
@@ -150,13 +169,22 @@ async function apiRequest(url, options = {}) {
         }
       } else if (typeof options.body === 'string') { bodyType = 'json'; body = options.body; }
       const result = await window.PromptPopDesktop.request(JSON.stringify({ url, method: options.method || 'GET', headers, bodyType, body, fields }));
+      if (result.status < 200 || result.status >= 300) recordApiError({ url, status: result.status, detail: result.body, source: 'Desktop native' });
       return { ok: result.status >= 200 && result.status < 300, status: result.status, json: async () => JSON.parse(result.body || '{}'), text: async () => result.body || '' };
+    } catch (error) {
+      recordApiError({ url, detail: error.message || error, source: 'Desktop native' }); throw error;
     } finally {
       desktopActivityCount = Math.max(0, desktopActivityCount - 1);
       if (!desktopActivityCount) window.PromptPopDesktop.setActivity?.(false);
     }
   }
-  if (!window.PromptPopNative?.request) return fetch(url, options);
+  if (!window.PromptPopNative?.request) {
+    try {
+      const response = await fetch(url, options);
+      if (!response.ok) recordApiError({ url, status: response.status, detail: await response.clone().text(), source: 'Web request' });
+      return response;
+    } catch (error) { recordApiError({ url, detail: error.message || error, source: 'Web request' }); throw error; }
+  }
   const headers = options.headers || {}; let bodyType = 'none'; let body = ''; let fields = [];
   if (options.body instanceof FormData) {
     bodyType = 'multipart';
@@ -166,7 +194,7 @@ async function apiRequest(url, options = {}) {
     }
   } else if (typeof options.body === 'string') { bodyType = 'json'; body = options.body; }
   const id = `request-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  return new Promise((resolve, reject) => { nativeRequests.set(id, { resolve, reject }); window.PromptPopNative.request(id, JSON.stringify({ url, method: options.method || 'GET', headers, bodyType, body, fields })); });
+  return new Promise((resolve, reject) => { nativeRequests.set(id, { resolve, reject, url }); window.PromptPopNative.request(id, JSON.stringify({ url, method: options.method || 'GET', headers, bodyType, body, fields })); });
 }
 function getModeLabel() { return modes.find(mode => mode.id === selectedMode)?.title || '\u4e13\u4e1a\u7cbe\u51c6\u578b'; }
 function getConfigs() {
@@ -270,6 +298,13 @@ document.querySelectorAll('.model-picker-trigger').forEach(button => button.addE
 $('#closeModelPicker').addEventListener('click', () => { modelPickerSheet.hidden = true; });
 $('#historyButton').addEventListener('click', () => { renderHistory(); historyDialog.showModal(); });
 $('#closeHistory').addEventListener('click', () => historyDialog.close());
+$('#errorLogButton').addEventListener('click', () => { renderErrorLogs(); errorLogDialog.showModal(); });
+$('#closeErrorLog').addEventListener('click', () => errorLogDialog.close());
+$('#clearErrorLog').addEventListener('click', () => { errorLogs = []; localStorage.removeItem('prompt-pop-error-log'); renderErrorLogs(); showToast('错误日志已清空'); });
+$('#copyErrorLog').addEventListener('click', async () => {
+  const text = errorLogs.map(entry => `[${entry.time}] ${entry.source} HTTP ${entry.status || 'NETWORK'}\n${entry.url}\n${entry.detail}`).join('\n\n');
+  showToast(await copyText(text) ? '错误日志已复制' : '复制失败');
+});
 function syncAudioPanel() {
   document.querySelectorAll('[data-sound-preset]').forEach(button => button.classList.toggle('active', button.dataset.soundPreset === soundPreset));
   $('#soundVolume').value = soundVolume;
