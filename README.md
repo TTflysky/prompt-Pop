@@ -1,77 +1,141 @@
-# Prompt Pop!
+# Prompt Pop! 解拍出图神器
 
-Prompt Pop! is a comic-inspired AI prompt workbench for Android, Windows, and browsers. It keeps provider settings on the device, supports separate text, vision, and image models, and is built for turning rough ideas and reference images into reusable prompts and generated images.
+面向手机、Windows 和浏览器的 AI 提示词与出图工作台。它把文本提示词优化、图像风格拆解、文生图、图生图、图片预设和本地配置备份集中在一个应用里。
 
-## Downloads
+项目主页同时适用于 [GitHub](https://github.com/TTflysky/prompt-Pop) 与 [Gitee](https://gitee.com/tang-changxu/jiepaichutushenqi)。代码不内置任何 API Key，所有模型配置默认只保存在你的设备本地。
 
-- **Android:** `PromptPop-v1.2.33.apk`
-  - Install over an existing Prompt Pop installation to keep local settings and history.
-  - This APK adds reliable Android system clipboard support for error logs and all prompt-copy actions.
-- **Windows:** `release/Prompt-Pop-Windows-v1.2.39.zip`
-  - Extract it and run `Prompt Pop 1.2.39.exe`. No installation is required.
+## 下载与安装
 
-## Main Features
+### Android
 
-### Prompt Studio
+- 当前安装包：`PromptPop-v1.2.36.apk`
+- 适用系统：Android 6.0 及以上。
+- 首次安装：在系统安装页允许来自当前浏览器或文件管理器的安装。
+- 覆盖升级：同一签名的 APK 可以直接覆盖，设备中的本地设置、历史记录和预设不会因覆盖安装而删除。
+- 已安装旧版 `v1.2.33` 的设备：该旧包使用的发布签名密钥未随项目保留。若系统提示“应用未安装”或“签名不一致”，请先在系统中卸载旧 Prompt Pop，再安装本版本；配置可先通过“设置 - 导出 TXT”备份。
 
-- Rewrite rough ideas into structured prompts.
-- Preset modes for professional, creative, role-play, step-by-step, and image prompting.
-- Copy optimized prompts or send them into image-generation workflows.
+### Windows
 
-### Image Studio
+- 当前便携版：`release/Prompt-Pop-Windows-v1.2.39.zip`
+- 解压后直接运行 `Prompt Pop 1.2.39.exe`，无需安装。
 
-- Text-to-image generation with optional prompt optimization.
-- Image-to-image generation with one or more numbered reference images.
-- Album selection and camera capture on Android.
-- Image size, aspect ratio, lens, angle, visual style, and generation-strength controls.
-- Separate controls for pose/clothing/action change and style/scene change.
-- Image preview, frame presets, download/save controls, and generated-image history.
+## 第一次配置模型
 
-### Visual Style Breakdown
+打开右上角“设置”，可分别配置三类模型。三者可以来自不同服务商，也可以共用同一个兼容 OpenAI 的中转接口。
 
-- Upload an image and use a vision model to extract reusable style prompts.
-- Focuses on visual language, palette, lighting, composition, materials, and print/film texture rather than locking the original subject into later generations.
-- Send the extracted style prompt directly to text-to-image or image-to-image, then edit it before generation.
+| 配置项 | 用途 | 常见接口能力 |
+| --- | --- | --- |
+| 文本优化模型 | 优化普通提示词、生图提示词 | `/v1/chat/completions` |
+| 视觉拆图模型 | 看图并提取可复用的风格提示词 | 支持图片输入的 `/v1/chat/completions` |
+| 生图模型 | 文生图、图生图 | `/v1/images/generations`、`/v1/images/edits` |
 
-### Model Settings
+配置步骤：
 
-- Independent local configuration for:
-  - Text optimization model
-  - Vision analysis model
-  - Image generation model
-- Supports common OpenAI-compatible endpoints, GPT endpoints, and custom providers.
-- Fetch available model names from the configured endpoint to reduce typing errors.
-- API keys and model choices remain on the current device; they are not committed to this repository.
+1. 在对应模型页选择服务商预设，或选择“自定义接口”。
+2. 填写 Base URL、API Key 和模型名。
+3. 点击“拉取模型”获取接口提供的模型列表，再点击模型选择按钮选中需要的模型。
+4. 保存设置。配置保存在当前设备，不会上传到代码仓库。
 
-### Local Data and Updates
+提示：文本模型、视觉模型、生图模型是独立设置。视觉拆图必须使用支持图片输入的多模态模型；图生图必须使用支持 `images/edits` 的生图模型。
 
-- Settings, working prompts, reference images, and generation state are retained locally where the platform allows.
-- Export/import configuration as a TXT file for moving personal settings between Android and Windows. Treat exported files as private because they can include API keys.
-- Android includes a settings-page hot-update workflow for web UI updates. Native Android capabilities such as the system clipboard require a new APK once, then later web updates can continue through the in-app updater.
-- Generation completion can be surfaced through Android notifications, and generated results are preserved for later viewing/saving when background work is supported by the device.
+## 使用指南
 
-### Desktop Convenience
+### 1. 通用优化
 
-- Drag images from other Windows applications directly onto image-to-image and style-breakdown upload areas.
-- Desktop and Android share the same TXT configuration format.
+1. 在“通用优化”输入一个粗略想法。
+2. 选择专业精准、创意发散、角色扮演或分步推理等模式。
+3. 点击“优化提示词”。
+4. 结果可复制，或带入后续的文生图流程。
 
-## Quick Start
+### 2. 文生图
 
-1. Open **Settings** and add the endpoint, API key, and model for the workflow you want to use.
-2. Use **Fetch models** when the provider offers an OpenAI-compatible model list.
-3. Choose **Prompt Studio**, **Image Studio**, or **Style Breakdown** from the tabs.
-4. Generate, copy, save, or send the result into the next workflow.
+1. 进入“文生图”，直接填写画面描述，或从通用优化带入。
+2. 可选“使用通用提示词控件”，用风格、视角、光线、构图、比例、焦段和滑块自动组合提示词。
+3. “优化生图词”只改写当前提示词，不会开始生成。
+4. 确认提示词和尺寸后，点击“文生图”。
+5. 成图后可预览全图、保存原图或导出带艺术相框的版本。
 
-## Local Browser Use
+### 3. 图生图
 
-Open `index.html` in a modern browser. Browser file access, clipboard support, background generation, and saving behavior depend on that browser; the Android and Windows wrappers provide the fuller device integration.
+1. 进入“图生图”，从相册选择、拍照或直接拖入一至六张参考图。
+2. 参考图按图 1、图 2 的编号发送，具体每张图代表什么由你在提示词中说明。因此人物、物件、汽车、场景等都可以自由组合。
+3. 设置生图尺寸、风格方向、反向提示词。
+4. “人物参考还原度”控制动作、表情、服装与肢体的参考程度：0% 仅锁定人脸身份，100% 尽量还原整个人物姿态。
+5. “风格/场景改动”控制画风、背景、服装与光线变化幅度。人像参考始终要求保留可识别的面部身份。
+6. 点击“生成图生图”。选择风格预设或图片预设不会自动出图。
 
-## Development
+### 4. 拆图分析
 
-- `apk-build/` contains the Android WebView wrapper and bundled web assets.
-- The Windows portable build is produced with `npm.cmd run build:win` and written under `release/`.
-- Keep generated APKs and release archives out of source edits unless publishing a new version.
+1. 上传参考图片。
+2. 选择快速概括或详细拆解后开始分析。
+3. 拆图结果重点输出视觉风格、构图语法、镜头、光线、色彩、材质与后期质感，不应复刻原图主体。
+4. 将结果带到文生图或图生图，再按自己的主体要求修改并生成。
 
-## Privacy
+### 5. 我的预设
 
-Prompt Pop! stores your provider configuration locally. Requests, images, and prompts are sent only to the endpoint you configure. Do not share exported configuration files or API keys.
+生成图片后，结果面板会出现“保存预设”：
+
+1. 点击保存预设并命名。
+2. 应用会保存当前提示词、生成图片、生成模式、尺寸、滑块和相关出图参数。
+3. 进入“我的预设”可看到本机保存的预设卡片。
+4. 点击“以参考图调用”：保存的成图将作为图生图参考图，并带入对应提示词和图生图参数。
+5. 点击“只套用提示词”：提示词和文生图参数被带入文生图页面。
+6. 两种调用方式均只加载内容，不会自动开始生成；确认后再点击生成按钮。
+
+预设存放在本机 IndexedDB，最多保留 30 条，不包含 API Key，也不会同步到 GitHub 或 Gitee。
+
+### 6. 保存图片与相框
+
+- 成图后点击“保存图片”，可选择原图或相框导出。
+- Android 会保存到系统相册的 `Pictures/Prompt Pop` 目录，具体显示时间由系统媒体库扫描决定。
+- Windows 会保存到图片目录下的 `Prompt Pop` 文件夹。
+- 相框仅影响导出的副本，原图和预设参考图不会被覆盖。
+
+### 7. 配置导入和导出
+
+设置页支持导出和导入 TXT：
+
+1. 导出 TXT 可备份接口地址、模型名和 API Key。
+2. 新手机或新电脑导入同一 TXT 后即可恢复配置。
+3. TXT 中可能包含 API Key，请勿上传、公开或提交到仓库。
+
+## 本地存储与隐私
+
+- API Key、模型配置、工作区草稿、生成结果和图片预设默认保存在当前设备。
+- 出图和分析请求只会发送到你自己填写的接口地址。
+- Android 支持前台服务、生成完成通知和自动保存，便于锁屏或切换应用时等待结果。
+- Android 页面热更新会下载新的 HTML、CSS 和 JavaScript；涉及原生权限、签名或 Android SDK 的改动仍需要安装新 APK。
+
+## 热更新
+
+在 Android 设置页点击“检查更新”。发现版本后选择“立即更新”，应用会下载最新网页资源并重新加载。当前版本为 `v1.2.36`。
+
+为保证既有 Android 用户仍能收到更新，网页热更新继续同步发布到 GitHub 主仓库；Gitee 仓库提供同一份代码、说明与 APK 分发。
+
+## 常见问题
+
+### 429、502、503
+
+这些状态通常来自中转站或上游模型限流、拥堵、故障。应用会对聊天接口自动重试两次；若持续失败，请在设置中查看错误日志，确认接口地址、模型名、账户配额和服务商状态。
+
+### 拉取到模型但无法选择
+
+先点击模型选择按钮，而不是系统下拉箭头。模型列表由应用的选择面板显示，选择后保存设置。
+
+### 图生图没有参考效果
+
+确认生图接口和模型支持 `/images/edits`，且至少添加了一张参考图。提示词中明确标注图 1、图 2 各自的作用，多参考图时不要依赖默认主次顺序。
+
+### 新 APK 无法覆盖旧 APK
+
+这是 Android 签名不一致导致的保护机制。先导出 TXT 备份，然后卸载旧包、安装新包并导入 TXT。之后使用同一新签名的版本即可持续覆盖升级。
+
+## 开发与发布
+
+- 根目录的 `index.html`、`styles.css`、`app.js` 是网页和 Windows 版本使用的资源。
+- `apk-build/assets/` 是 Android APK 内置的网页资源，发 Android 版本时必须同步。
+- `apk-build/` 包含 Android WebView 包装器、权限和后台生成逻辑。
+- `update.json` 是 Android 热更新版本清单。
+- Windows 便携版使用 `npm.cmd run build:win` 构建。
+
+不要将 API Key、导出的配置 TXT 或签名密钥提交到 GitHub/Gitee。

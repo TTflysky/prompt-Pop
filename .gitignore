@@ -1,7 +1,10 @@
 # Build outputs and local signing material
 PromptPop.apk
 PromptPop.apk.idsig
+*.apk.idsig
 apk-build/*.keystore
+apk-build/signing.properties
+apk-build/build-v*/
 apk-build/classes/
 apk-build/dex/
 apk-build/gen/

@@ -36,7 +36,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.34';
+const APP_VERSION = '1.2.36';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -64,7 +64,16 @@ if (!storedSettings && localStorage.getItem('prompt-pop-key')) {
 
 modeGrid.innerHTML = modes.map(mode => `<button class="mode-card ${mode.id === selectedMode ? 'selected' : ''}" data-mode="${mode.id}"><span class="mode-icon" style="--mode-color:${mode.color}">${mode.icon}</span><strong>${mode.title}</strong><p>${mode.desc}</p></button>`).join('');
 modeGrid.addEventListener('click', event => { const card = event.target.closest('.mode-card'); if (!card) return; selectedMode = card.dataset.mode; localStorage.setItem('prompt-pop-mode', selectedMode); document.querySelectorAll('.mode-card').forEach(item => item.classList.toggle('selected', item === card)); playSound('tab'); });
-function activatePanel(panel, focusTarget) { document.querySelectorAll('.section-tab').forEach(item => item.classList.toggle('active', item.dataset.panel === panel)); document.querySelectorAll('[data-panel-section]').forEach(section => section.classList.toggle('active', section.dataset.panelSection === panel)); window.scrollTo({ top: 0, behavior: 'smooth' }); if (focusTarget) setTimeout(() => $(focusTarget)?.focus(), 260); }
+function activatePanel(panel, focusTarget) {
+  document.querySelectorAll('.section-tab').forEach(item => item.classList.toggle('active', item.dataset.panel === panel));
+  document.querySelectorAll('[data-panel-section]').forEach(section => {
+    const isActive = section.dataset.panelSection === panel;
+    section.classList.toggle('active', isActive);
+    section.hidden = !isActive;
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (focusTarget) setTimeout(() => $(focusTarget)?.focus(), 260);
+}
 document.querySelectorAll('.section-tab').forEach(tab => tab.addEventListener('click', () => activatePanel(tab.dataset.panel)));
 function updateCount() { inputCount.textContent = `${rawInput.value.length} \u5b57`; }
 function playSound(type = 'click') {
@@ -447,7 +456,7 @@ async function generateImage() {
     const data = await response.json(); const image = data.data?.[0]; lastGenerationKind = imageGenerateMode === 'image' ? 'image-to-image' : 'text-to-image';
     generatedImageUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || '';
     if (!generatedImageUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247');
-    $('#imageOutput').innerHTML = `<img src="${generatedImageUrl}" alt="生成结果" />`; $('#saveTextToImageButton').disabled = false; queueWorkspacePersist(); showToast('\u56fe\u7247\u751f\u6210\u5b8c\u6210');
+    $('#imageOutput').innerHTML = `<img src="${generatedImageUrl}" alt="生成结果" />`; $('#saveTextToImageButton').disabled = false; $('#saveTextPresetButton').disabled = false; queueWorkspacePersist(); showToast('\u56fe\u7247\u751f\u6210\u5b8c\u6210');
   } catch (error) { $('#imageOutput').innerHTML = `<div class="image-output-placeholder">${error.message}</div>`; showToast(`\u751f\u6210\u5931\u8d25\uff1a${error.message}`); }
   finally { button.disabled = false; button.innerHTML = imageGenerateMode === 'image' ? '\u2301 <span>\u56fe\u751f\u56fe</span>' : '\u2726 <span>\u6587\u751f\u56fe</span>'; }
 }
@@ -555,7 +564,7 @@ async function generateDirectI2I() {
     const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); form.append('size', $('#directI2ISize').value); directI2IFiles.forEach(file => form.append('image', file, file.name)); appendImageReferenceFidelity(form, config, config.model);
     const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/images/edits`, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     if (!response.ok) { const detail = await response.text(); throw new Error(`HTTP ${response.status} ${detail.slice(0, 180)}`); }
-    const image = (await response.json()).data?.[0]; directI2IResultUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || ''; if (!directI2IResultUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247'); $('#directI2IOutput').innerHTML = `<img src="${directI2IResultUrl}" alt="图生图结果" />`; $('#saveDirectI2IButton').disabled = false; queueWorkspacePersist(); showToast('\u56fe\u751f\u56fe\u5b8c\u6210');
+    const image = (await response.json()).data?.[0]; directI2IResultUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || ''; if (!directI2IResultUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247'); $('#directI2IOutput').innerHTML = `<img src="${directI2IResultUrl}" alt="图生图结果" />`; $('#saveDirectI2IButton').disabled = false; $('#saveDirectI2IPresetButton').disabled = false; queueWorkspacePersist(); showToast('\u56fe\u751f\u56fe\u5b8c\u6210');
   } catch (error) { $('#directI2IOutput').innerHTML = `<div class="image-output-placeholder">${error.message}</div>`; showToast(`\u56fe\u751f\u56fe\u5931\u8d25：${error.message}`); }
   finally { button.disabled = false; button.innerHTML = '\u2301 <span>\u751f\u6210\u56fe\u751f\u56fe</span>'; }
 }
@@ -795,6 +804,245 @@ $('#closeImagePreview').addEventListener('click', () => $('#imagePreviewDialog')
 const WORKSPACE_DB_NAME = 'prompt-pop-workspace';
 const WORKSPACE_STATE_KEY = 'latest-workspace';
 const WORKSPACE_LOCAL_KEY = 'prompt-pop-workspace-latest';
+const PRESET_COLLECTION_KEY = 'image-presets-v1';
+const PRESET_FALLBACK_KEY = 'prompt-pop-image-presets-v1';
+const MAX_SAVED_IMAGE_PRESETS = 30;
+let imagePresetLibrary = [];
+let pendingPresetSource = '';
+
+function getPresetImageSource(kind) {
+  return kind === 'image-to-image' ? directI2IResultUrl : generatedImageUrl;
+}
+function makeImagePresetId() {
+  return window.crypto?.randomUUID ? window.crypto.randomUUID() : 'preset-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+}
+function getImagePresetSettings() {
+  const ids = ['imageSize', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'negativePrompt', 'directI2ISize', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative'];
+  const settings = { useImageControls: $('#useImageControls').checked };
+  ids.forEach(id => { const field = $('#' + id); if (field) settings[id] = field.value; });
+  return settings;
+}
+function setPresetFieldValues(settings, ids) {
+  ids.forEach(id => {
+    if (settings[id] === undefined || settings[id] === null) return;
+    const field = $('#' + id);
+    if (field) field.value = settings[id];
+  });
+}
+function refreshPresetControlLabels() {
+  $('#lensValue').textContent = $('#lensSlider').value + 'mm';
+  $('#detailValue').textContent = $('#detailSlider').value + '%';
+  $('#styleValue').textContent = $('#styleSlider').value + '%';
+  $('#directI2IPoseStrengthValue').textContent = $('#directI2IPoseStrength').value + '%';
+  $('#directI2IStrengthValue').textContent = $('#directI2IStrength').value + '%';
+}
+async function makePresetReferenceImage(source) {
+  if (!source) return '';
+  let dataUrl = source;
+  try {
+    if (!source.startsWith('data:')) {
+      const response = await fetch(source);
+      if (!response.ok) throw new Error('Unable to download generated image');
+      dataUrl = await readFileDataUrl(await response.blob());
+    }
+    const image = await loadExportImage(dataUrl);
+    const longestSide = Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height);
+    if (!longestSide) throw new Error('Invalid image size');
+    const scale = Math.min(1, 1440 / longestSide);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+    canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', .86);
+  } catch {
+    return dataUrl;
+  }
+}
+async function imagePresetSourceToFile(source, filename) {
+  const response = await fetch(source);
+  if (!response.ok) throw new Error('参考图片已失效，无法加载');
+  const blob = await response.blob();
+  if (!blob.size) throw new Error('参考图片为空');
+  return new File([blob], filename, { type: blob.type || 'image/jpeg', lastModified: Date.now() });
+}
+function formatImagePresetTime(value) {
+  try { return new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+  catch { return ''; }
+}
+function findImagePreset(id) {
+  return imagePresetLibrary.find(item => item.id === id);
+}
+function createImagePresetButton(label, className, action, id) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.textContent = label;
+  button.dataset.presetAction = action;
+  button.dataset.presetId = id;
+  return button;
+}
+function renderImagePresets() {
+  const list = $('#savedImagePresets');
+  const counter = $('#savedPresetCount');
+  if (counter) counter.textContent = imagePresetLibrary.length + ' 条';
+  list.replaceChildren();
+  if (!imagePresetLibrary.length) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = '生成图片后，点击“保存预设”即可在这里复用。';
+    list.append(empty);
+    return;
+  }
+  imagePresetLibrary.forEach(preset => {
+    const card = document.createElement('article');
+    card.className = 'saved-preset-card';
+    const image = document.createElement('img');
+    image.className = 'saved-preset-preview';
+    image.src = preset.referenceImage;
+    image.alt = '预设参考图';
+    image.loading = 'lazy';
+    const content = document.createElement('div');
+    content.className = 'saved-preset-content';
+    const name = document.createElement('strong');
+    name.className = 'saved-preset-name';
+    name.textContent = preset.name || '未命名预设';
+    const meta = document.createElement('p');
+    meta.className = 'saved-preset-meta';
+    const sourceLabel = preset.sourceKind === 'image-to-image' ? '图生图' : '文生图';
+    meta.textContent = sourceLabel + ' · ' + formatImagePresetTime(preset.createdAt);
+    const actions = document.createElement('div');
+    actions.className = 'saved-preset-actions';
+    actions.append(
+      createImagePresetButton('以参考图调用', 'action-button blue', 'reference', preset.id),
+      createImagePresetButton('只套用提示词', 'soft-button', 'text', preset.id),
+      createImagePresetButton('×', 'preset-remove-button', 'delete', preset.id)
+    );
+    content.append(name, meta, actions);
+    card.append(image, content);
+    list.append(card);
+  });
+}
+async function loadImagePresets() {
+  let stored;
+  try {
+    const db = await openWorkspaceDb();
+    stored = await workspaceRead(db, PRESET_COLLECTION_KEY);
+    db.close();
+  } catch { /* LocalStorage fallback is only used when IndexedDB is unavailable. */ }
+  if (!Array.isArray(stored)) {
+    try { stored = JSON.parse(localStorage.getItem(PRESET_FALLBACK_KEY) || '[]'); }
+    catch { stored = []; }
+  }
+  imagePresetLibrary = Array.isArray(stored) ? stored.filter(item => item && item.id && item.referenceImage).slice(0, MAX_SAVED_IMAGE_PRESETS) : [];
+  renderImagePresets();
+}
+async function saveImagePresets() {
+  try {
+    const db = await openWorkspaceDb();
+    await workspaceWrite(db, PRESET_COLLECTION_KEY, imagePresetLibrary);
+    db.close();
+    localStorage.removeItem(PRESET_FALLBACK_KEY);
+  } catch {
+    try { localStorage.setItem(PRESET_FALLBACK_KEY, JSON.stringify(imagePresetLibrary)); }
+    catch { throw new Error('本地存储空间不足，预设未保存'); }
+  }
+}
+function openPresetSaveDialog(kind) {
+  const source = getPresetImageSource(kind);
+  if (!source) return showToast('请先生成图片，再保存预设');
+  pendingPresetSource = kind;
+  const prompt = kind === 'image-to-image' ? $('#directI2IPrompt').value.trim() : imagePrompt.value.trim();
+  $('#presetNameInput').value = (prompt || '图片预设').replace(/\s+/g, ' ').slice(0, 30);
+  const dialog = $('#presetSaveDialog');
+  dialog.showModal();
+  setTimeout(() => $('#presetNameInput').select(), 0);
+}
+function closePresetSaveDialog() {
+  pendingPresetSource = '';
+  if ($('#presetSaveDialog').open) $('#presetSaveDialog').close();
+}
+async function savePendingImagePreset(event) {
+  event.preventDefault();
+  const kind = pendingPresetSource;
+  const source = getPresetImageSource(kind);
+  const name = $('#presetNameInput').value.trim();
+  if (!kind || !source) return closePresetSaveDialog();
+  if (!name) return $('#presetNameInput').focus();
+  const button = $('#confirmPresetSaveButton');
+  button.disabled = true;
+  button.textContent = '保存中';
+  try {
+    const prompt = kind === 'image-to-image' ? $('#directI2IPrompt').value.trim() : imagePrompt.value.trim();
+    const referenceImage = await makePresetReferenceImage(source);
+    imagePresetLibrary.unshift({
+      id: makeImagePresetId(),
+      name,
+      prompt,
+      referenceImage,
+      sourceKind: kind,
+      createdAt: Date.now(),
+      settings: getImagePresetSettings()
+    });
+    imagePresetLibrary = imagePresetLibrary.slice(0, MAX_SAVED_IMAGE_PRESETS);
+    await saveImagePresets();
+    closePresetSaveDialog();
+    renderImagePresets();
+    showToast('预设已保存到本机');
+  } catch (error) {
+    showToast('保存预设失败：' + (error.message || error));
+  } finally {
+    button.disabled = false;
+    button.textContent = '保存预设';
+  }
+}
+async function applyImagePreset(preset, mode) {
+  if (!preset) return;
+  const settings = preset.settings || {};
+  if (mode === 'text') {
+    setPresetFieldValues(settings, ['imageSize', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'negativePrompt']);
+    if (typeof settings.useImageControls === 'boolean') $('#useImageControls').checked = settings.useImageControls;
+    refreshPresetControlLabels();
+    imagePrompt.value = preset.prompt || '';
+    imageCount.textContent = imagePrompt.value.length + ' 字';
+    setImageGenerateMode('text');
+    activatePanel('image', '#imagePrompt');
+    showToast('已带入文生图，确认后再点击生成');
+    return;
+  }
+  try {
+    setPresetFieldValues(settings, ['directI2ISize', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative']);
+    refreshPresetControlLabels();
+    $('#directI2IPrompt').value = preset.prompt || '';
+    const file = await imagePresetSourceToFile(preset.referenceImage, (preset.name || 'preset') + '.jpg');
+    directI2IFiles = [file];
+    renderDirectI2IReferences();
+    activatePanel('img2img', '#directI2IPrompt');
+    showToast('已带入图生图，确认后再点击生成');
+  } catch (error) {
+    showToast('加载参考图失败：' + (error.message || error));
+  }
+}
+$('#saveTextPresetButton').addEventListener('click', () => openPresetSaveDialog('text-to-image'));
+$('#saveDirectI2IPresetButton').addEventListener('click', () => openPresetSaveDialog('image-to-image'));
+$('#presetSaveForm').addEventListener('submit', savePendingImagePreset);
+$('#cancelPresetSaveButton').addEventListener('click', closePresetSaveDialog);
+$('#closePresetSaveDialog').addEventListener('click', closePresetSaveDialog);
+$('#presetSaveDialog').addEventListener('close', () => { pendingPresetSource = ''; });
+$('#savedImagePresets').addEventListener('click', async event => {
+  const button = event.target.closest('[data-preset-action]');
+  if (!button) return;
+  const preset = findImagePreset(button.dataset.presetId);
+  if (!preset) return;
+  if (button.dataset.presetAction === 'delete') {
+    if (!window.confirm('删除这个预设？')) return;
+    imagePresetLibrary = imagePresetLibrary.filter(item => item.id !== preset.id);
+    await saveImagePresets();
+    renderImagePresets();
+    showToast('预设已删除');
+    return;
+  }
+  await applyImagePreset(preset, button.dataset.presetAction === 'reference' ? 'reference' : 'text');
+});
 let workspacePersistTimer = 0;
 function openWorkspaceDb() {
   return new Promise((resolve, reject) => {
@@ -823,8 +1071,8 @@ async function restoreWorkspaceState() {
     if (!state) return;
     Object.entries(state.values || {}).forEach(([id, value]) => { const element = $(`#${id}`); if (!element) return; if ('value' in element) element.value = value; else element.textContent = value; });
     setImageGenerateMode(state.imageGenerateMode || 'text');
-    if (state.generatedImageUrl) { generatedImageUrl = state.generatedImageUrl; $('#imageOutput').innerHTML = `<img src="${generatedImageUrl}" alt="生成结果" />`; $('#saveTextToImageButton').disabled = false; }
-    if (state.directI2IResultUrl) { directI2IResultUrl = state.directI2IResultUrl; $('#directI2IOutput').innerHTML = `<img src="${directI2IResultUrl}" alt="图生图结果" />`; $('#saveDirectI2IButton').disabled = false; }
+    if (state.generatedImageUrl) { generatedImageUrl = state.generatedImageUrl; $('#imageOutput').innerHTML = `<img src="${generatedImageUrl}" alt="生成结果" />`; $('#saveTextToImageButton').disabled = false; $('#saveTextPresetButton').disabled = false; }
+    if (state.directI2IResultUrl) { directI2IResultUrl = state.directI2IResultUrl; $('#directI2IOutput').innerHTML = `<img src="${directI2IResultUrl}" alt="图生图结果" />`; $('#saveDirectI2IButton').disabled = false; $('#saveDirectI2IPresetButton').disabled = false; }
     ['lensSlider', 'detailSlider', 'styleSlider', 'directI2IPoseStrength', 'directI2IStrength'].forEach(id => $(`#${id}`).dispatchEvent(new Event('input')));
     updateCount();
   } catch { /* A missing or unavailable cache should not block the workspace. */ }
@@ -853,9 +1101,9 @@ async function persistWorkspaceState() {
 function renderRecoveredImage(kind, source) {
   if (!source) return;
   if (kind === 'image-to-image') {
-    directI2IResultUrl = source; $('#directI2IOutput').innerHTML = `<img src="${source}" alt="image-to-image result" />`; $('#saveDirectI2IButton').disabled = false;
+    directI2IResultUrl = source; $('#directI2IOutput').innerHTML = `<img src="${source}" alt="image-to-image result" />`; $('#saveDirectI2IButton').disabled = false; $('#saveDirectI2IPresetButton').disabled = false;
   } else {
-    generatedImageUrl = source; $('#imageOutput').innerHTML = `<img src="${source}" alt="generated result" />`; $('#saveTextToImageButton').disabled = false;
+    generatedImageUrl = source; $('#imageOutput').innerHTML = `<img src="${source}" alt="generated result" />`; $('#saveTextToImageButton').disabled = false; $('#saveTextPresetButton').disabled = false;
   }
 }
 function requestLastGeneratedImage() {
@@ -889,7 +1137,7 @@ document.addEventListener('input', event => { if (!event.target.closest('#settin
 document.addEventListener('change', event => { if (!event.target.closest('#settingsDialog')) queueWorkspacePersist(); });
 window.addEventListener('pagehide', () => { saveWorkspaceFallback(collectWorkspaceState()); persistWorkspaceState(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { saveWorkspaceFallback(collectWorkspaceState()); persistWorkspaceState(); } });
-restoreWorkspaceState().finally(() => { if (!imagePrompt.value) buildImagePrompt(); });
+Promise.all([restoreWorkspaceState(), loadImagePresets()]).finally(() => { if (!imagePrompt.value) buildImagePrompt(); });
 
 async function optimize() {
   const idea = rawInput.value.trim();
