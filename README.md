@@ -4,6 +4,20 @@
 
 项目主页同时适用于 [GitHub](https://github.com/TTflysky/prompt-Pop) 与 [Gitee](https://gitee.com/tang-changxu/jiepaichutushenqi)。代码不内置任何 API Key，所有模型配置默认只保存在你的设备本地。
 
+## 界面预览
+
+### 文生图工作台
+
+文生图页包含模型、规格、比例、视觉风格、视角、构图、镜头焦段、细节强度和风格化程度等可选参数。滑块和预设只辅助组合提示词，确认后再手动点击生成。
+
+![文生图工作台](docs/screenshots/text-to-image-workbench.png)
+
+### 提示词与结果区域
+
+生成前可继续编辑提示词，生成结果、保存图片、保存预设和带入后续工作流均在同一面板中完成。
+
+![提示词与结果区域](docs/screenshots/image-prompt-result.png)
+
 ## 下载与安装
 
 ### Android
