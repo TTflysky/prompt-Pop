@@ -15,6 +15,8 @@ const providerPresets = {
   custom: { baseUrl: '', model: '' },
 };
 const $ = selector => document.querySelector(selector);
+document.querySelector('[data-panel="director"]')?.remove();
+document.querySelector('[data-panel-section="director"]')?.remove();
 const modeGrid = $('#modeGrid');
 const rawInput = $('#rawInput');
 const resultBody = $('#resultBody');
@@ -36,7 +38,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.36';
+const APP_VERSION = '1.2.41';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -71,7 +73,8 @@ function activatePanel(panel, focusTarget) {
     section.classList.toggle('active', isActive);
     section.hidden = !isActive;
   });
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' });
   if (focusTarget) setTimeout(() => $(focusTarget)?.focus(), 260);
 }
 document.querySelectorAll('.section-tab').forEach(tab => tab.addEventListener('click', () => activatePanel(tab.dataset.panel)));
@@ -407,7 +410,168 @@ imageControls.forEach(id => $(`#${id}`).addEventListener('input', buildImageProm
 imageControls.forEach(id => $(`#${id}`).addEventListener('change', buildImagePrompt));
 $('#useImageControls').addEventListener('change', event => { const enabled = event.target.checked; $('#imageControlsStatus').textContent = enabled ? '已开启：风格、镜头、光线和滑块会写入提示词' : '已关闭：保留你手动输入的提示词，不会自动改写'; if (enabled) buildImagePrompt(); showToast(enabled ? '已启用通用提示词控件' : '已关闭通用提示词控件'); });
 $('#imageCopyButton').addEventListener('click', async () => { if (!imagePrompt.value) return; showToast(await copyText(imagePrompt.value) ? '\u751f\u56fe\u63d0\u793a\u8bcd\u5df2\u590d\u5236' : '\u590d\u5236\u5931\u8d25\uff0c\u8bf7\u957f\u6309\u6587\u5b57\u590d\u5236'); });
-$('#useImagePromptButton').addEventListener('click', () => { rawInput.value = imagePrompt.value; updateCount(); activatePanel('main', '#rawInput'); showToast('\u5df2\u5e26\u5165\u901a\u7528\u4f18\u5316\u5668'); });
+$('#useImagePromptButton').addEventListener('click', () => { rawInput.value = imagePrompt.value; updateCount(); activatePanel('prompt', '#rawInput'); showToast('\u5df2\u5e26\u5165\u901a\u7528\u4f18\u5316\u5668'); });
+if (document.querySelector('[data-panel-section="director"]')) {
+const directorStylePresets = {
+  fuji: {
+    style: 'Fujifilm Superia film photography, subtle grain, natural skin texture, cool green and cyan color cast',
+    angle: 'eye-level view',
+    light: 'soft natural light, golden hour',
+    composition: 'rule of thirds composition'
+  },
+  cinematic: {
+    style: 'cinematic, photorealistic, cinematic color grading',
+    angle: 'low-angle view',
+    light: 'dramatic studio lighting, hard shadows',
+    composition: 'dynamic diagonal composition'
+  },
+  comic: {
+    style: 'American retro comic, halftone dots, bold ink outline',
+    angle: 'close-up perspective',
+    light: 'neon rim light, blue and magenta glow',
+    composition: 'symmetrical centered composition'
+  },
+  editorial: {
+    style: 'editorial fashion photography, high-end magazine',
+    angle: 'eye-level view',
+    light: 'soft overcast light, gentle shadows',
+    composition: 'minimalist composition with negative space'
+  }
+};
+const directorControlIds = ['directorSubject', 'directorStyle', 'directorAngle', 'directorLight', 'directorComposition', 'directorRatio', 'directorSize', 'directorLens', 'directorDetail', 'directorStylize', 'directorNegative'];
+let directorReferenceFile = null;
+let directorReferenceData = '';
+function getDirectorOptionLabel(id) {
+  const input = $(`#${id}`);
+  return input?.selectedOptions?.[0]?.textContent?.trim() || '';
+}
+function refreshDirectorModelStatus() {
+  const config = getConfigs().image;
+  $('#directorModelStatus').textContent = config.model || '未配置';
+}
+function refreshDirectorPrompt() {
+  const subject = $('#directorSubject').value.trim() || 'high quality visual work';
+  const lens = $('#directorLens').value;
+  const detail = $('#directorDetail').value;
+  const stylize = $('#directorStylize').value;
+  const negative = $('#directorNegative').value.trim();
+  const prompt = `${subject}, ${$('#directorStyle').value}, ${lens}mm lens, ${$('#directorAngle').value}, ${$('#directorLight').value}, ${$('#directorComposition').value}, highly detailed, detail level ${detail}/100, stylization ${stylize}/100, professional visual quality, sharp focus, rich textures${negative ? `, negative prompt: ${negative}` : ''} ${$('#directorRatio').value}`;
+  $('#directorPromptPreview').value = prompt;
+  $('#directorPromptCount').textContent = `${prompt.length} 字`;
+  $('#directorLensValue').textContent = `${lens}mm`;
+  $('#directorDetailValue').textContent = `${detail}%`;
+  $('#directorStylizeValue').textContent = `${stylize}%`;
+  $('#directorMonitorLens').textContent = `${lens}mm`;
+  $('#directorMonitorRatio').textContent = getDirectorOptionLabel('directorRatio').split(' ')[0] || '1:1';
+  $('#directorMonitorSize').textContent = getDirectorOptionLabel('directorSize').split(' ')[0] || '1K';
+  $('#directorMonitorReference').textContent = directorReferenceFile ? '1 张' : '0 张';
+  $('#directorReferenceStatus').textContent = directorReferenceFile ? 'IMAGE MODE' : 'TEXT MODE';
+  refreshDirectorModelStatus();
+  return prompt;
+}
+function setDirectorReference(file) {
+  directorReferenceFile = file || null;
+  directorReferenceData = '';
+  if (!directorReferenceFile) {
+    $('#directorUpload').value = '';
+    $('#directorUploadName').textContent = '添加风格、构图或主体参考图';
+    $('#directorReferencePreview').hidden = true;
+    $('#directorRemoveReferenceButton').hidden = true;
+    refreshDirectorPrompt();
+    return;
+  }
+  $('#directorUploadName').textContent = directorReferenceFile.name;
+  $('#directorRemoveReferenceButton').hidden = false;
+  const reader = new FileReader();
+  reader.onload = () => {
+    directorReferenceData = reader.result;
+    $('#directorReferenceImage').src = directorReferenceData;
+    $('#directorReferencePreview').hidden = false;
+    refreshDirectorPrompt();
+  };
+  reader.onerror = () => { setDirectorReference(null); showToast('参考图读取失败'); };
+  reader.readAsDataURL(directorReferenceFile);
+}
+function applyDirectorPreset(name) {
+  const preset = directorStylePresets[name];
+  if (!preset) return;
+  $('#directorStyle').value = preset.style;
+  $('#directorAngle').value = preset.angle;
+  $('#directorLight').value = preset.light;
+  $('#directorComposition').value = preset.composition;
+  document.querySelectorAll('[data-director-preset]').forEach(button => button.classList.toggle('active', button.dataset.directorPreset === name));
+  refreshDirectorPrompt();
+}
+function syncDirectorValuesToImageLab() {
+  const pairs = [['directorSubject', 'imageSubject'], ['directorAngle', 'imageAngle'], ['directorLight', 'imageLight'], ['directorComposition', 'imageComposition'], ['directorRatio', 'imageRatio'], ['directorSize', 'imageSize'], ['directorLens', 'lensSlider'], ['directorDetail', 'detailSlider'], ['directorStylize', 'styleSlider'], ['directorNegative', 'negativePrompt']];
+  pairs.forEach(([source, target]) => { const sourceInput = $(`#${source}`); const targetInput = $(`#${target}`); if (sourceInput && targetInput) targetInput.value = sourceInput.value; });
+  const imageStyle = $('#imageStyle');
+  if ([...imageStyle.options].some(option => option.value === $('#directorStyle').value)) imageStyle.value = $('#directorStyle').value;
+  $('#useImageControls').checked = false;
+  $('#imageControlsStatus').textContent = '已由导播台接管提示词；可在此继续手动编辑。';
+}
+function stageDirectorReferenceForImageLab() {
+  if (!directorReferenceFile) return false;
+  try {
+    const transfer = new DataTransfer();
+    transfer.items.add(directorReferenceFile);
+    const upload = $('#imageUpload');
+    upload.files = transfer.files;
+    upload.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  } catch {
+    showToast('参考图无法带入，请在图生图页重新选择');
+    return false;
+  }
+}
+function sendDirectorToImage(mode = 'text', autoGenerate = false) {
+  const prompt = refreshDirectorPrompt();
+  syncDirectorValuesToImageLab();
+  imagePrompt.value = prompt;
+  imageCount.textContent = `${prompt.length} 字`;
+  if (mode === 'image') {
+    if (!stageDirectorReferenceForImageLab()) return;
+    setImageGenerateMode('image');
+  } else {
+    setImageGenerateMode('text');
+  }
+  activatePanel('image', '#imagePrompt');
+  showToast(mode === 'image' ? '已带入图生图，确认后再点击生成' : '已带入文生图，确认后再点击生成');
+  if (autoGenerate) setTimeout(() => generateImage(), 280);
+}
+directorControlIds.forEach(id => {
+  $(`#${id}`).addEventListener('input', refreshDirectorPrompt);
+  $(`#${id}`).addEventListener('change', refreshDirectorPrompt);
+});
+document.querySelectorAll('[data-director-preset]').forEach(button => button.addEventListener('click', () => applyDirectorPreset(button.dataset.directorPreset)));
+document.querySelectorAll('[data-director-focus]').forEach(button => button.addEventListener('click', () => {
+  document.querySelectorAll('[data-director-focus]').forEach(item => item.classList.toggle('active', item === button));
+  const target = $(`#${button.dataset.directorFocus}`);
+  target?.focus({ preventScroll: false });
+}));
+$('#directorUpload').addEventListener('change', event => setDirectorReference(event.target.files?.[0] || null));
+$('#directorRemoveReferenceButton').addEventListener('click', () => setDirectorReference(null));
+$('#directorClearButton').addEventListener('click', () => {
+  $('#directorSubject').value = '';
+  $('#directorNegative').value = '';
+  $('#directorRatio').value = '--ar 1:1';
+  $('#directorSize').value = '1024x1024';
+  $('#directorLens').value = '50';
+  $('#directorDetail').value = '75';
+  $('#directorStylize').value = '65';
+  setDirectorReference(null);
+  applyDirectorPreset('fuji');
+  queueWorkspacePersist();
+  showToast('导播台已清空');
+});
+$('#directorCopyButton').addEventListener('click', async () => showToast(await copyText(refreshDirectorPrompt()) ? '导播台提示词已复制' : '复制失败，请长按文字复制'));
+$('#directorSaveDraftButton').addEventListener('click', () => { localStorage.setItem('prompt-pop-director-draft', JSON.stringify({ prompt: refreshDirectorPrompt(), savedAt: Date.now() })); queueWorkspacePersist(); showToast('导播台草稿已保存'); });
+$('#directorToTextButton').addEventListener('click', () => sendDirectorToImage('text'));
+$('#directorToImageButton').addEventListener('click', () => sendDirectorToImage('image'));
+$('#directorGenerateButton').addEventListener('click', () => sendDirectorToImage('text', true));
+refreshDirectorPrompt();
+}
+
 let imageGenerateMode = 'text';
 let imageFile = null;
 let imageReferenceData = '';
@@ -1057,7 +1221,7 @@ function workspaceWrite(db, key, value) { return new Promise((resolve, reject) =
 function queueWorkspacePersist() { clearTimeout(workspacePersistTimer); workspacePersistTimer = setTimeout(() => { persistWorkspaceState(); }, 350); }
 async function persistWorkspaceState() {
   try {
-    const ids = ['rawInput', 'optimizedOutput', 'imagePrompt', 'negativePrompt', 'imageSubject', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'directI2IPrompt', 'directI2ISize', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative', 'breakdownResult'];
+     const ids = ['rawInput', 'optimizedOutput', 'imagePrompt', 'negativePrompt', 'imageSubject', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'directI2IPrompt', 'directI2ISize', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative', 'breakdownResult'];
     const values = {};
     ids.forEach(id => { const element = $(`#${id}`); if (element) values[id] = 'value' in element ? element.value : element.textContent; });
     const db = await openWorkspaceDb();
@@ -1078,7 +1242,7 @@ async function restoreWorkspaceState() {
   } catch { /* A missing or unavailable cache should not block the workspace. */ }
 }
 function collectWorkspaceState() {
-  const ids = ['rawInput', 'optimizedOutput', 'imagePrompt', 'negativePrompt', 'imageSubject', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'directI2IPrompt', 'directI2ISize', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative', 'breakdownResult'];
+   const ids = ['rawInput', 'optimizedOutput', 'imagePrompt', 'negativePrompt', 'imageSubject', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'directI2IPrompt', 'directI2ISize', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative', 'breakdownResult'];
   const values = {};
   ids.forEach(id => { const element = $(`#${id}`); if (element) values[id] = 'value' in element ? element.value : element.textContent; });
   return { values, imageGenerateMode, generatedImageUrl, directI2IResultUrl, lastGenerationKind, savedAt: Date.now() };
@@ -1130,14 +1294,15 @@ async function restoreWorkspaceState() {
     const nativeImage = await requestLastGeneratedImage();
     if (nativeImage?.source) { lastGenerationKind = nativeImage.kind || lastGenerationKind || 'text-to-image'; renderRecoveredImage(lastGenerationKind, nativeImage.source); queueWorkspacePersist(); }
   } catch { /* A deleted gallery image should not block the page. */ }
-  ['lensSlider', 'detailSlider', 'styleSlider', 'directI2IPoseStrength', 'directI2IStrength'].forEach(id => $(`#${id}`).dispatchEvent(new Event('input')));
+  ['lensSlider', 'detailSlider', 'styleSlider', 'directI2IPoseStrength', 'directI2IStrength'].forEach(id => $(`#${id}`)?.dispatchEvent(new Event('input')));
+  refreshDirectorPrompt();
   updateCount();
 }
 document.addEventListener('input', event => { if (!event.target.closest('#settingsDialog')) queueWorkspacePersist(); });
 document.addEventListener('change', event => { if (!event.target.closest('#settingsDialog')) queueWorkspacePersist(); });
 window.addEventListener('pagehide', () => { saveWorkspaceFallback(collectWorkspaceState()); persistWorkspaceState(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { saveWorkspaceFallback(collectWorkspaceState()); persistWorkspaceState(); } });
-Promise.all([restoreWorkspaceState(), loadImagePresets()]).finally(() => { if (!imagePrompt.value) buildImagePrompt(); });
+Promise.all([restoreWorkspaceState(), loadImagePresets()]).finally(() => { if (!imagePrompt.value) buildImagePrompt(); refreshDirectorPrompt(); });
 
 async function optimize() {
   const idea = rawInput.value.trim();
