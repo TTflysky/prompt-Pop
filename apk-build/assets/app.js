@@ -15,8 +15,6 @@ const providerPresets = {
   custom: { baseUrl: '', model: '' },
 };
 const $ = selector => document.querySelector(selector);
-document.querySelector('[data-panel="director"]')?.remove();
-document.querySelector('[data-panel-section="director"]')?.remove();
 const modeGrid = $('#modeGrid');
 const rawInput = $('#rawInput');
 const resultBody = $('#resultBody');
@@ -38,7 +36,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.41';
+const APP_VERSION = '1.2.42';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -391,8 +389,52 @@ $('#clearButton').addEventListener('click', () => { rawInput.value = ''; updateC
 
 const imagePrompt = $('#imagePrompt');
 const imageCount = $('#imageCount');
-const imageControls = ['imageSubject', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'negativePrompt'];
+const outputSizeProfiles = {
+  '1k': { '1:1': '1024x1024', '16:9': '1536x864', '9:16': '864x1536', '4:3': '1365x1024', '3:2': '1536x1024' },
+  '2k': { '1:1': '2048x2048', '16:9': '2048x1152', '9:16': '1152x2048', '4:3': '2048x1536', '3:2': '2048x1365' },
+  '4k': { '1:1': '4096x4096', '16:9': '4096x2304', '9:16': '2304x4096', '4:3': '4096x3072', '3:2': '4096x2731' }
+};
+const outputRatioOptions = ['1:1', '16:9', '9:16', '4:3', '3:2'];
+function ratioKey(value) { return String(value || '--ar 1:1').replace(/^--ar\s+/, ''); }
+function getImageOutputSize(scope = 'image') {
+  const prefix = scope === 'directI2I' ? 'directI2I' : 'image';
+  const quality = $(`#${prefix}Quality`)?.value || '1k';
+  const ratio = ratioKey($(`#${prefix}Ratio`)?.value);
+  return outputSizeProfiles[quality]?.[ratio] || outputSizeProfiles['1k']['1:1'];
+}
+function updateOutputSizeSummary(scope = 'image') {
+  const prefix = scope === 'directI2I' ? 'directI2I' : 'image';
+  const summary = $(`#${prefix}SizeSummary`);
+  if (!summary) return;
+  const size = getImageOutputSize(scope).split('x');
+  summary.textContent = `输出尺寸：${size[0]} × ${size[1]}`;
+}
+function inferQualityFromLegacySize(size) {
+  const match = String(size || '').match(/^(\d+)x(\d+)$/);
+  if (!match) return '1k';
+  const longestSide = Math.max(Number(match[1]), Number(match[2]));
+  return longestSide > 3072 ? '4k' : longestSide > 1536 ? '2k' : '1k';
+}
+function inferRatioFromLegacySize(size) {
+  const match = String(size || '').match(/^(\d+)x(\d+)$/);
+  if (!match) return '--ar 1:1';
+  const value = Number(match[1]) / Number(match[2]);
+  const closest = outputRatioOptions.reduce((best, option) => {
+    const [width, height] = option.split(':').map(Number);
+    return Math.abs(value - width / height) < Math.abs(value - best.value) ? { option, value: width / height } : best;
+  }, { option: '1:1', value: 1 });
+  return `--ar ${closest.option}`;
+}
+function migrateLegacyImageSettings(settings, scope = 'image') {
+  const prefix = scope === 'directI2I' ? 'directI2I' : 'image';
+  const legacySize = settings[`${prefix}Size`];
+  if (!settings[`${prefix}Quality`] && legacySize) settings[`${prefix}Quality`] = inferQualityFromLegacySize(legacySize);
+  if (!settings[`${prefix}Ratio`] && legacySize) settings[`${prefix}Ratio`] = inferRatioFromLegacySize(legacySize);
+  return settings;
+}
+const imageControls = ['imageSubject', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageQuality', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'negativePrompt'];
 function buildImagePrompt() {
+  updateOutputSizeSummary('image');
   if (!$('#useImageControls').checked) return;
   const subject = $('#imageSubject').value.trim() || '\u9ad8\u8d28\u91cf\u89c6\u89c9\u4f5c\u54c1';
   const lens = $('#lensSlider').value;
@@ -405,12 +447,17 @@ function buildImagePrompt() {
   $('#lensValue').textContent = `${lens}mm`;
   $('#detailValue').textContent = `${detail}%`;
   $('#styleValue').textContent = `${stylize}%`;
+  updateOutputSizeSummary('image');
 }
 imageControls.forEach(id => $(`#${id}`).addEventListener('input', buildImagePrompt));
 imageControls.forEach(id => $(`#${id}`).addEventListener('change', buildImagePrompt));
+['directI2IQuality', 'directI2IRatio'].forEach(id => { $(`#${id}`).addEventListener('input', () => updateOutputSizeSummary('directI2I')); $(`#${id}`).addEventListener('change', () => updateOutputSizeSummary('directI2I')); });
+updateOutputSizeSummary('directI2I');
 $('#useImageControls').addEventListener('change', event => { const enabled = event.target.checked; $('#imageControlsStatus').textContent = enabled ? '已开启：风格、镜头、光线和滑块会写入提示词' : '已关闭：保留你手动输入的提示词，不会自动改写'; if (enabled) buildImagePrompt(); showToast(enabled ? '已启用通用提示词控件' : '已关闭通用提示词控件'); });
 $('#imageCopyButton').addEventListener('click', async () => { if (!imagePrompt.value) return; showToast(await copyText(imagePrompt.value) ? '\u751f\u56fe\u63d0\u793a\u8bcd\u5df2\u590d\u5236' : '\u590d\u5236\u5931\u8d25\uff0c\u8bf7\u957f\u6309\u6587\u5b57\u590d\u5236'); });
 $('#useImagePromptButton').addEventListener('click', () => { rawInput.value = imagePrompt.value; updateCount(); activatePanel('prompt', '#rawInput'); showToast('\u5df2\u5e26\u5165\u901a\u7528\u4f18\u5316\u5668'); });
+// The director panel is optional and has been removed from this release.
+function refreshDirectorPrompt() {}
 if (document.querySelector('[data-panel-section="director"]')) {
 const directorStylePresets = {
   fuji: {
@@ -611,10 +658,10 @@ async function generateImage() {
   try {
     let response;
     if (imageGenerateMode === 'image') {
-      const form = new FormData(); form.append('model', imageModel); form.append('prompt', buildI2IPrompt(imagePrompt.value, $('#imageStyle').value, 20, $('#styleSlider').value, $('#negativePrompt').value)); form.append('size', $('#imageSize').value); form.append('image', imageFile, imageFile.name); appendImageReferenceFidelity(form, config, imageModel);
+      const form = new FormData(); form.append('model', imageModel); form.append('prompt', buildI2IPrompt(imagePrompt.value, $('#imageStyle').value, 20, $('#styleSlider').value, $('#negativePrompt').value)); form.append('size', getImageOutputSize('image')); form.append('image', imageFile, imageFile.name); appendImageReferenceFidelity(form, config, imageModel);
       response = await apiRequest(endpoint, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     } else {
-      response = await apiRequest(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: imageModel, prompt: imagePrompt.value, size: $('#imageSize').value }) });
+      response = await apiRequest(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: imageModel, prompt: imagePrompt.value, size: getImageOutputSize('image') }) });
     }
     if (!response.ok) { const errorBody = await response.text(); throw new Error(`HTTP ${response.status} ${errorBody.slice(0, 180)}`); }
     const data = await response.json(); const image = data.data?.[0]; lastGenerationKind = imageGenerateMode === 'image' ? 'image-to-image' : 'text-to-image';
@@ -725,7 +772,7 @@ async function generateDirectI2I() {
   const button = $('#generateDirectI2IButton'); directI2IResultUrl = ''; $('#saveDirectI2IButton').disabled = true; button.disabled = true; button.innerHTML = '\u2026 <span>\u56fe\u751f\u56fe\u4e2d</span>';
   try {
     const fullPrompt = `${buildI2IPrompt(prompt, $('#directI2IStyle').value, $('#directI2IPoseStrength').value, $('#directI2IStrength').value, $('#directI2INegative').value)} ${directI2IFiles.length > 1 ? `Multiple numbered reference images are attached. Their roles are defined entirely by the user's prompt. Follow the explicit references to image 1, image 2, and so on; do not assume that any image is a person, subject, style, or composition anchor.` : ''}`.trim(); lastGenerationKind = 'image-to-image';
-    const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); form.append('size', $('#directI2ISize').value); directI2IFiles.forEach(file => form.append('image', file, file.name)); appendImageReferenceFidelity(form, config, config.model);
+    const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); form.append('size', getImageOutputSize('directI2I')); directI2IFiles.forEach(file => form.append('image', file, file.name)); appendImageReferenceFidelity(form, config, config.model);
     const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/images/edits`, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     if (!response.ok) { const detail = await response.text(); throw new Error(`HTTP ${response.status} ${detail.slice(0, 180)}`); }
     const image = (await response.json()).data?.[0]; directI2IResultUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || ''; if (!directI2IResultUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247'); $('#directI2IOutput').innerHTML = `<img src="${directI2IResultUrl}" alt="图生图结果" />`; $('#saveDirectI2IButton').disabled = false; $('#saveDirectI2IPresetButton').disabled = false; queueWorkspacePersist(); showToast('\u56fe\u751f\u56fe\u5b8c\u6210');
@@ -981,7 +1028,7 @@ function makeImagePresetId() {
   return window.crypto?.randomUUID ? window.crypto.randomUUID() : 'preset-' + Date.now() + '-' + Math.random().toString(16).slice(2);
 }
 function getImagePresetSettings() {
-  const ids = ['imageSize', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'negativePrompt', 'directI2ISize', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative'];
+  const ids = ['imageQuality', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'negativePrompt', 'directI2IQuality', 'directI2IRatio', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative'];
   const settings = { useImageControls: $('#useImageControls').checked };
   ids.forEach(id => { const field = $('#' + id); if (field) settings[id] = field.value; });
   return settings;
@@ -999,6 +1046,8 @@ function refreshPresetControlLabels() {
   $('#styleValue').textContent = $('#styleSlider').value + '%';
   $('#directI2IPoseStrengthValue').textContent = $('#directI2IPoseStrength').value + '%';
   $('#directI2IStrengthValue').textContent = $('#directI2IStrength').value + '%';
+  updateOutputSizeSummary('image');
+  updateOutputSizeSummary('directI2I');
 }
 async function makePresetReferenceImage(source) {
   if (!source) return '';
@@ -1161,9 +1210,9 @@ async function savePendingImagePreset(event) {
 }
 async function applyImagePreset(preset, mode) {
   if (!preset) return;
-  const settings = preset.settings || {};
+  const settings = migrateLegacyImageSettings(migrateLegacyImageSettings({ ...(preset.settings || {}) }, 'image'), 'directI2I');
   if (mode === 'text') {
-    setPresetFieldValues(settings, ['imageSize', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'negativePrompt']);
+    setPresetFieldValues(settings, ['imageQuality', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'negativePrompt']);
     if (typeof settings.useImageControls === 'boolean') $('#useImageControls').checked = settings.useImageControls;
     refreshPresetControlLabels();
     imagePrompt.value = preset.prompt || '';
@@ -1174,7 +1223,7 @@ async function applyImagePreset(preset, mode) {
     return;
   }
   try {
-    setPresetFieldValues(settings, ['directI2ISize', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative']);
+    setPresetFieldValues(settings, ['directI2IQuality', 'directI2IRatio', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative']);
     refreshPresetControlLabels();
     $('#directI2IPrompt').value = preset.prompt || '';
     const file = await imagePresetSourceToFile(preset.referenceImage, (preset.name || 'preset') + '.jpg');
@@ -1218,31 +1267,8 @@ function openWorkspaceDb() {
 }
 function workspaceRead(db, key) { return new Promise((resolve, reject) => { const request = db.transaction('workspace', 'readonly').objectStore('workspace').get(key); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
 function workspaceWrite(db, key, value) { return new Promise((resolve, reject) => { const request = db.transaction('workspace', 'readwrite').objectStore('workspace').put(value, key); request.onsuccess = () => resolve(); request.onerror = () => reject(request.error); }); }
-function queueWorkspacePersist() { clearTimeout(workspacePersistTimer); workspacePersistTimer = setTimeout(() => { persistWorkspaceState(); }, 350); }
-async function persistWorkspaceState() {
-  try {
-     const ids = ['rawInput', 'optimizedOutput', 'imagePrompt', 'negativePrompt', 'imageSubject', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'directI2IPrompt', 'directI2ISize', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative', 'breakdownResult'];
-    const values = {};
-    ids.forEach(id => { const element = $(`#${id}`); if (element) values[id] = 'value' in element ? element.value : element.textContent; });
-    const db = await openWorkspaceDb();
-    await workspaceWrite(db, WORKSPACE_STATE_KEY, { values, imageGenerateMode, generatedImageUrl, directI2IResultUrl, savedAt: Date.now() });
-    db.close();
-  } catch { /* Session recovery is best-effort and must never interrupt generation. */ }
-}
-async function restoreWorkspaceState() {
-  try {
-    const db = await openWorkspaceDb(); const state = await workspaceRead(db, WORKSPACE_STATE_KEY); db.close();
-    if (!state) return;
-    Object.entries(state.values || {}).forEach(([id, value]) => { const element = $(`#${id}`); if (!element) return; if ('value' in element) element.value = value; else element.textContent = value; });
-    setImageGenerateMode(state.imageGenerateMode || 'text');
-    if (state.generatedImageUrl) { generatedImageUrl = state.generatedImageUrl; $('#imageOutput').innerHTML = `<img src="${generatedImageUrl}" alt="生成结果" />`; $('#saveTextToImageButton').disabled = false; $('#saveTextPresetButton').disabled = false; }
-    if (state.directI2IResultUrl) { directI2IResultUrl = state.directI2IResultUrl; $('#directI2IOutput').innerHTML = `<img src="${directI2IResultUrl}" alt="图生图结果" />`; $('#saveDirectI2IButton').disabled = false; $('#saveDirectI2IPresetButton').disabled = false; }
-    ['lensSlider', 'detailSlider', 'styleSlider', 'directI2IPoseStrength', 'directI2IStrength'].forEach(id => $(`#${id}`).dispatchEvent(new Event('input')));
-    updateCount();
-  } catch { /* A missing or unavailable cache should not block the workspace. */ }
-}
 function collectWorkspaceState() {
-   const ids = ['rawInput', 'optimizedOutput', 'imagePrompt', 'negativePrompt', 'imageSubject', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'directI2IPrompt', 'directI2ISize', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative', 'breakdownResult'];
+   const ids = ['rawInput', 'optimizedOutput', 'imagePrompt', 'negativePrompt', 'imageSubject', 'imageQuality', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'directI2IPrompt', 'directI2IQuality', 'directI2IRatio', 'directI2IStyle', 'directI2IPoseStrength', 'directI2IStrength', 'directI2INegative', 'breakdownResult'];
   const values = {};
   ids.forEach(id => { const element = $(`#${id}`); if (element) values[id] = 'value' in element ? element.value : element.textContent; });
   return { values, imageGenerateMode, generatedImageUrl, directI2IResultUrl, lastGenerationKind, savedAt: Date.now() };
@@ -1285,7 +1311,8 @@ async function restoreWorkspaceState() {
     if (!state || (fallback && fallback.savedAt > (state.savedAt || 0))) state = fallback;
   } catch { /* Ignore malformed old data. */ }
   if (state) {
-    Object.entries(state.values || {}).forEach(([id, value]) => { const element = $(`#${id}`); if (!element) return; if ('value' in element) element.value = value; else element.textContent = value; });
+    const values = migrateLegacyImageSettings(migrateLegacyImageSettings({ ...(state.values || {}) }, 'image'), 'directI2I');
+    Object.entries(values).forEach(([id, value]) => { const element = $(`#${id}`); if (!element) return; if ('value' in element) element.value = value; else element.textContent = value; });
     setImageGenerateMode(state.imageGenerateMode || 'text'); lastGenerationKind = state.lastGenerationKind || '';
     if (state.generatedImageUrl) renderRecoveredImage('text-to-image', state.generatedImageUrl);
     if (state.directI2IResultUrl) renderRecoveredImage('image-to-image', state.directI2IResultUrl);
@@ -1295,14 +1322,15 @@ async function restoreWorkspaceState() {
     if (nativeImage?.source) { lastGenerationKind = nativeImage.kind || lastGenerationKind || 'text-to-image'; renderRecoveredImage(lastGenerationKind, nativeImage.source); queueWorkspacePersist(); }
   } catch { /* A deleted gallery image should not block the page. */ }
   ['lensSlider', 'detailSlider', 'styleSlider', 'directI2IPoseStrength', 'directI2IStrength'].forEach(id => $(`#${id}`)?.dispatchEvent(new Event('input')));
-  refreshDirectorPrompt();
+  updateOutputSizeSummary('image');
+  updateOutputSizeSummary('directI2I');
   updateCount();
 }
 document.addEventListener('input', event => { if (!event.target.closest('#settingsDialog')) queueWorkspacePersist(); });
 document.addEventListener('change', event => { if (!event.target.closest('#settingsDialog')) queueWorkspacePersist(); });
 window.addEventListener('pagehide', () => { saveWorkspaceFallback(collectWorkspaceState()); persistWorkspaceState(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { saveWorkspaceFallback(collectWorkspaceState()); persistWorkspaceState(); } });
-Promise.all([restoreWorkspaceState(), loadImagePresets()]).finally(() => { if (!imagePrompt.value) buildImagePrompt(); refreshDirectorPrompt(); });
+Promise.all([restoreWorkspaceState(), loadImagePresets()]).finally(() => { if (!imagePrompt.value) buildImagePrompt(); });
 
 async function optimize() {
   const idea = rawInput.value.trim();
