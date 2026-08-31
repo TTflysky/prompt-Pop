@@ -6,6 +6,31 @@ let tray;
 let isQuitting = false;
 let activityLabel = '待命';
 
+function getPresetFilePath() {
+  return path.join(app.getPath('userData'), 'prompt-pop-presets.json');
+}
+
+async function readPresets() {
+  try {
+    const value = JSON.parse(await fs.readFile(getPresetFilePath(), 'utf8'));
+    return Array.isArray(value) ? value : [];
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+async function writePresets(value) {
+  const presets = JSON.parse(value);
+  if (!Array.isArray(presets)) throw new Error('Invalid preset data');
+  const filePath = getPresetFilePath();
+  const temporaryPath = `${filePath}.tmp`;
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(temporaryPath, JSON.stringify(presets), 'utf8');
+  await fs.rename(temporaryPath, filePath);
+  return filePath;
+}
+
 const isSupportedEndpoint = value => {
   const url = new URL(value);
   return url.protocol === 'https:' && /\/(models|chat\/completions|images\/(generations|edits))$/.test(url.pathname);
@@ -84,6 +109,8 @@ app.whenReady().then(() => {
   tray.on('click', showMainWindow);
   ipcMain.handle('prompt-pop:request', (_, payload) => createRequest(payload));
   ipcMain.handle('prompt-pop:version', () => app.getVersion());
+  ipcMain.handle('prompt-pop:get-presets', () => readPresets());
+  ipcMain.handle('prompt-pop:save-presets', (_, value) => writePresets(value));
   ipcMain.on('prompt-pop:activity', (_, active) => { activityLabel = active ? '正在生成' : '待命'; refreshTray(); });
   ipcMain.handle('prompt-pop:save-image', async (_, source, filename) => {
     const filePath = path.join(app.getPath('pictures'), 'Prompt Pop', filename);

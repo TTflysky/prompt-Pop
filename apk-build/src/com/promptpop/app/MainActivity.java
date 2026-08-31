@@ -155,6 +155,16 @@ public class MainActivity extends Activity {
             new Thread(() -> MainActivity.this.getLastGeneratedImage(requestId)).start();
         }
 
+        @JavascriptInterface
+        public void getImagePresets(final String requestId) {
+            new Thread(() -> MainActivity.this.getImagePresets(requestId)).start();
+        }
+
+        @JavascriptInterface
+        public void saveImagePresets(final String requestId, final String json) {
+            new Thread(() -> MainActivity.this.saveImagePresets(requestId, json)).start();
+        }
+
     }
 
     private boolean isLocalAppUrl(String url) {
@@ -425,6 +435,38 @@ public class MainActivity extends Activity {
         }
     }
 
+    private File getImagePresetFile() {
+        return new File(getFilesDir(), "promptpop-presets.json");
+    }
+
+    private void getImagePresets(String requestId) {
+        try {
+            File file = getImagePresetFile();
+            String json = file.isFile() ? readStream(new java.io.FileInputStream(file)) : "[]";
+            new JSONArray(json);
+            sendImagePresetsResult(requestId, json, "");
+        } catch (Exception error) {
+            sendImagePresetsResult(requestId, "", error.getMessage() == null ? "Unable to read presets" : error.getMessage());
+        }
+    }
+
+    private void saveImagePresets(String requestId, String json) {
+        try {
+            new JSONArray(json);
+            File file = getImagePresetFile();
+            File temporary = new File(file.getParentFile(), file.getName() + ".tmp");
+            FileOutputStream output = new FileOutputStream(temporary);
+            output.write(json.getBytes(StandardCharsets.UTF_8));
+            output.getFD().sync();
+            output.close();
+            if (file.exists() && !file.delete()) throw new IllegalStateException("Unable to replace preset file");
+            if (!temporary.renameTo(file)) throw new IllegalStateException("Unable to activate preset file");
+            sendImagePresetsResult(requestId, json, "");
+        } catch (Exception error) {
+            sendImagePresetsResult(requestId, "", error.getMessage() == null ? "Unable to save presets" : error.getMessage());
+        }
+    }
+
     private Uri writeImageToGallery(String source, String filename) throws Exception {
         Uri savedUri = null;
         try {
@@ -555,6 +597,11 @@ public class MainActivity extends Activity {
 
     private void sendLastGeneratedImageResult(String requestId, String kind, String source, String error) {
         String script = "window.__nativeLastGeneratedImageResponse(" + JSONObject.quote(requestId) + "," + JSONObject.quote(kind) + "," + JSONObject.quote(source) + "," + JSONObject.quote(error) + ");";
+        runOnUiThread(() -> webView.evaluateJavascript(script, null));
+    }
+
+    private void sendImagePresetsResult(String requestId, String json, String error) {
+        String script = "window.__nativeImagePresetsResponse(" + JSONObject.quote(requestId) + "," + JSONObject.quote(json) + "," + JSONObject.quote(error) + ");";
         runOnUiThread(() -> webView.evaluateJavascript(script, null));
     }
 

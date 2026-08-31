@@ -36,7 +36,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.42';
+const APP_VERSION = '1.2.44';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -139,6 +139,7 @@ const nativeSaveRequests = new Map();
 const nativeTextSaveRequests = new Map();
 const nativeClipboardRequests = new Map();
 const nativeLastImageRequests = new Map();
+const nativeImagePresetRequests = new Map();
 let desktopActivityCount = 0;
 window.__nativeApiResponse = (id, status, body, error) => {
   const request = nativeRequests.get(id); if (!request) return; nativeRequests.delete(id);
@@ -155,6 +156,11 @@ window.__nativeClipboardResponse = (id, error) => { const request = nativeClipbo
 window.__nativeLastGeneratedImageResponse = (id, kind, source, error) => {
   const request = nativeLastImageRequests.get(id); if (!request) return; nativeLastImageRequests.delete(id);
   if (error) return request.reject(new Error(error)); request.resolve({ kind, source });
+};
+window.__nativeImagePresetsResponse = (id, json, error) => {
+  const request = nativeImagePresetRequests.get(id); if (!request) return; nativeImagePresetRequests.delete(id);
+  if (error) return request.reject(new Error(error));
+  try { request.resolve(JSON.parse(json || '[]')); } catch { request.reject(new Error('预设数据格式错误')); }
 };
 window.__nativeUpdateResponse = (id, status, body, error) => {
   const request = updateRequests.get(id); if (!request) return; updateRequests.delete(id);
@@ -392,7 +398,7 @@ const imageCount = $('#imageCount');
 const outputSizeProfiles = {
   '1k': { '1:1': '1024x1024', '16:9': '1536x864', '9:16': '864x1536', '4:3': '1365x1024', '3:2': '1536x1024' },
   '2k': { '1:1': '2048x2048', '16:9': '2048x1152', '9:16': '1152x2048', '4:3': '2048x1536', '3:2': '2048x1365' },
-  '4k': { '1:1': '4096x4096', '16:9': '4096x2304', '9:16': '2304x4096', '4:3': '4096x3072', '3:2': '4096x2731' }
+  '4k': { '1:1': '3840x3840', '16:9': '3840x2160', '9:16': '2160x3840', '4:3': '3840x2880', '3:2': '3840x2560' }
 };
 const outputRatioOptions = ['1:1', '16:9', '9:16', '4:3', '3:2'];
 function ratioKey(value) { return String(value || '--ar 1:1').replace(/^--ar\s+/, ''); }
@@ -402,12 +408,48 @@ function getImageOutputSize(scope = 'image') {
   const ratio = ratioKey($(`#${prefix}Ratio`)?.value);
   return outputSizeProfiles[quality]?.[ratio] || outputSizeProfiles['1k']['1:1'];
 }
-function updateOutputSizeSummary(scope = 'image') {
+function getImageRequestOptions(scope, model) {
+  const options = { size: getImageOutputSize(scope) };
+  if (/^gpt-image-2(?:-|$)/i.test(String(model || '').trim())) options.quality = 'high';
+  return options;
+}
+function appendImageRequestOptions(form, scope, model) {
+  Object.entries(getImageRequestOptions(scope, model)).forEach(([key, value]) => form.append(key, value));
+}
+function parseOutputDimensions(size) {
+  const match = String(size || '').match(/^(\d+)x(\d+)$/i);
+  if (!match) return null;
+  return { width: Number(match[1]), height: Number(match[2]) };
+}
+function formatOutputDimensions(dimensions) {
+  return dimensions ? `${dimensions.width} × ${dimensions.height}` : '';
+}
+function updateOutputSizeSummary(scope = 'image', actualSize = '') {
   const prefix = scope === 'directI2I' ? 'directI2I' : 'image';
   const summary = $(`#${prefix}SizeSummary`);
   if (!summary) return;
-  const size = getImageOutputSize(scope).split('x');
-  summary.textContent = `输出尺寸：${size[0]} × ${size[1]}`;
+  const targetSize = formatOutputDimensions(parseOutputDimensions(getImageOutputSize(scope)));
+  summary.textContent = actualSize ? `目标：${targetSize} · 实际：${actualSize}` : `输出尺寸：${targetSize}`;
+  summary.classList.toggle('output-size-mismatch', Boolean(actualSize && actualSize !== targetSize));
+}
+async function inspectGeneratedImage(source) {
+  if (!source) return { url: source, actualSize: '', error: '接口没有返回图片' };
+  try {
+    const image = await loadExportImage(source);
+    return {
+      url: source,
+      actualSize: formatOutputDimensions({ width: image.naturalWidth || image.width, height: image.naturalHeight || image.height })
+    };
+  } catch (error) {
+    return { url: source, actualSize: '', error: error.message || '无法读取图片尺寸' };
+  }
+}
+function reportGeneratedImageSize(scope, result) {
+  const targetSize = formatOutputDimensions(parseOutputDimensions(getImageOutputSize(scope)));
+  updateOutputSizeSummary(scope, result.actualSize || '未读取');
+  if (result.actualSize && result.actualSize !== targetSize) return `服务端尺寸不一致：请求 ${targetSize}，实际 ${result.actualSize}，APP 未放大原图`;
+  if (result.error) return `图片已生成，但尺寸读取失败：${result.error}`;
+  return '图片生成完成';
 }
 function inferQualityFromLegacySize(size) {
   const match = String(size || '').match(/^(\d+)x(\d+)$/);
@@ -658,16 +700,18 @@ async function generateImage() {
   try {
     let response;
     if (imageGenerateMode === 'image') {
-      const form = new FormData(); form.append('model', imageModel); form.append('prompt', buildI2IPrompt(imagePrompt.value, $('#imageStyle').value, 20, $('#styleSlider').value, $('#negativePrompt').value)); form.append('size', getImageOutputSize('image')); form.append('image', imageFile, imageFile.name); appendImageReferenceFidelity(form, config, imageModel);
+      const form = new FormData(); form.append('model', imageModel); form.append('prompt', buildI2IPrompt(imagePrompt.value, $('#imageStyle').value, 20, $('#styleSlider').value, $('#negativePrompt').value)); appendImageRequestOptions(form, 'image', imageModel); form.append('image', imageFile, imageFile.name); appendImageReferenceFidelity(form, config, imageModel);
       response = await apiRequest(endpoint, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     } else {
-      response = await apiRequest(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: imageModel, prompt: imagePrompt.value, size: getImageOutputSize('image') }) });
+      response = await apiRequest(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: imageModel, prompt: imagePrompt.value, ...getImageRequestOptions('image', imageModel) }) });
     }
     if (!response.ok) { const errorBody = await response.text(); throw new Error(`HTTP ${response.status} ${errorBody.slice(0, 180)}`); }
     const data = await response.json(); const image = data.data?.[0]; lastGenerationKind = imageGenerateMode === 'image' ? 'image-to-image' : 'text-to-image';
-    generatedImageUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || '';
-    if (!generatedImageUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247');
-    $('#imageOutput').innerHTML = `<img src="${generatedImageUrl}" alt="生成结果" />`; $('#saveTextToImageButton').disabled = false; $('#saveTextPresetButton').disabled = false; queueWorkspacePersist(); showToast('\u56fe\u7247\u751f\u6210\u5b8c\u6210');
+    const rawImageUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || '';
+    if (!rawImageUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247');
+    const inspected = await inspectGeneratedImage(rawImageUrl);
+    generatedImageUrl = inspected.url;
+    $('#imageOutput').innerHTML = `<img src="${generatedImageUrl}" alt="生成结果" />`; $('#saveTextToImageButton').disabled = false; $('#saveTextPresetButton').disabled = false; queueWorkspacePersist(); showToast(reportGeneratedImageSize('image', inspected));
   } catch (error) { $('#imageOutput').innerHTML = `<div class="image-output-placeholder">${error.message}</div>`; showToast(`\u751f\u6210\u5931\u8d25\uff1a${error.message}`); }
   finally { button.disabled = false; button.innerHTML = imageGenerateMode === 'image' ? '\u2301 <span>\u56fe\u751f\u56fe</span>' : '\u2726 <span>\u6587\u751f\u56fe</span>'; }
 }
@@ -772,10 +816,10 @@ async function generateDirectI2I() {
   const button = $('#generateDirectI2IButton'); directI2IResultUrl = ''; $('#saveDirectI2IButton').disabled = true; button.disabled = true; button.innerHTML = '\u2026 <span>\u56fe\u751f\u56fe\u4e2d</span>';
   try {
     const fullPrompt = `${buildI2IPrompt(prompt, $('#directI2IStyle').value, $('#directI2IPoseStrength').value, $('#directI2IStrength').value, $('#directI2INegative').value)} ${directI2IFiles.length > 1 ? `Multiple numbered reference images are attached. Their roles are defined entirely by the user's prompt. Follow the explicit references to image 1, image 2, and so on; do not assume that any image is a person, subject, style, or composition anchor.` : ''}`.trim(); lastGenerationKind = 'image-to-image';
-    const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); form.append('size', getImageOutputSize('directI2I')); directI2IFiles.forEach(file => form.append('image', file, file.name)); appendImageReferenceFidelity(form, config, config.model);
+    const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); appendImageRequestOptions(form, 'directI2I', config.model); directI2IFiles.forEach(file => form.append('image', file, file.name)); appendImageReferenceFidelity(form, config, config.model);
     const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/images/edits`, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     if (!response.ok) { const detail = await response.text(); throw new Error(`HTTP ${response.status} ${detail.slice(0, 180)}`); }
-    const image = (await response.json()).data?.[0]; directI2IResultUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || ''; if (!directI2IResultUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247'); $('#directI2IOutput').innerHTML = `<img src="${directI2IResultUrl}" alt="图生图结果" />`; $('#saveDirectI2IButton').disabled = false; $('#saveDirectI2IPresetButton').disabled = false; queueWorkspacePersist(); showToast('\u56fe\u751f\u56fe\u5b8c\u6210');
+    const image = (await response.json()).data?.[0]; const rawImageUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || ''; if (!rawImageUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247'); const inspected = await inspectGeneratedImage(rawImageUrl); directI2IResultUrl = inspected.url; $('#directI2IOutput').innerHTML = `<img src="${directI2IResultUrl}" alt="图生图结果" />`; $('#saveDirectI2IButton').disabled = false; $('#saveDirectI2IPresetButton').disabled = false; queueWorkspacePersist(); showToast(reportGeneratedImageSize('directI2I', inspected));
   } catch (error) { $('#directI2IOutput').innerHTML = `<div class="image-output-placeholder">${error.message}</div>`; showToast(`\u56fe\u751f\u56fe\u5931\u8d25：${error.message}`); }
   finally { button.disabled = false; button.innerHTML = '\u2301 <span>\u751f\u6210\u56fe\u751f\u56fe</span>'; }
 }
@@ -1136,20 +1180,40 @@ function renderImagePresets() {
   });
 }
 async function loadImagePresets() {
-  let stored;
+  const sources = [];
+  try {
+    if (window.PromptPopDesktop?.getPresets) sources.push(await window.PromptPopDesktop.getPresets());
+    else if (window.PromptPopNative?.getImagePresets) {
+      const id = `presets-read-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      sources.push(await new Promise((resolve, reject) => { nativeImagePresetRequests.set(id, { resolve, reject }); window.PromptPopNative.getImagePresets(id); }));
+    }
+  } catch { /* Browser storage is still available for one-time migration. */ }
   try {
     const db = await openWorkspaceDb();
-    stored = await workspaceRead(db, PRESET_COLLECTION_KEY);
+    sources.push(await workspaceRead(db, PRESET_COLLECTION_KEY));
     db.close();
   } catch { /* LocalStorage fallback is only used when IndexedDB is unavailable. */ }
-  if (!Array.isArray(stored)) {
-    try { stored = JSON.parse(localStorage.getItem(PRESET_FALLBACK_KEY) || '[]'); }
-    catch { stored = []; }
-  }
-  imagePresetLibrary = Array.isArray(stored) ? stored.filter(item => item && item.id && item.referenceImage).slice(0, MAX_SAVED_IMAGE_PRESETS) : [];
+  try { sources.push(JSON.parse(localStorage.getItem(PRESET_FALLBACK_KEY) || '[]')); } catch { /* Ignore malformed fallback data. */ }
+  const merged = new Map();
+  sources.flatMap(source => Array.isArray(source) ? source : []).forEach(item => {
+    if (item && item.id && item.referenceImage && !merged.has(item.id)) merged.set(item.id, item);
+  });
+  imagePresetLibrary = [...merged.values()].sort((left, right) => Number(right.createdAt || 0) - Number(left.createdAt || 0)).slice(0, MAX_SAVED_IMAGE_PRESETS);
   renderImagePresets();
+  if (imagePresetLibrary.length) {
+    try { await saveImagePresets(); } catch { /* Showing recovered presets is more important than blocking startup. */ }
+  }
 }
 async function saveImagePresets() {
+  let durableSaved = false;
+  if (window.PromptPopDesktop?.savePresets) {
+    await window.PromptPopDesktop.savePresets(JSON.stringify(imagePresetLibrary));
+    durableSaved = true;
+  } else if (window.PromptPopNative?.saveImagePresets) {
+    const id = `presets-write-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    await new Promise((resolve, reject) => { nativeImagePresetRequests.set(id, { resolve, reject }); window.PromptPopNative.saveImagePresets(id, JSON.stringify(imagePresetLibrary)); });
+    durableSaved = true;
+  }
   try {
     const db = await openWorkspaceDb();
     await workspaceWrite(db, PRESET_COLLECTION_KEY, imagePresetLibrary);
@@ -1157,7 +1221,7 @@ async function saveImagePresets() {
     localStorage.removeItem(PRESET_FALLBACK_KEY);
   } catch {
     try { localStorage.setItem(PRESET_FALLBACK_KEY, JSON.stringify(imagePresetLibrary)); }
-    catch { throw new Error('本地存储空间不足，预设未保存'); }
+    catch { if (!durableSaved) throw new Error('本地存储空间不足，预设未保存'); }
   }
 }
 function openPresetSaveDialog(kind) {
