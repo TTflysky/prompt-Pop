@@ -36,7 +36,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.44';
+const APP_VERSION = '1.2.45';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -429,7 +429,7 @@ function updateOutputSizeSummary(scope = 'image', actualSize = '') {
   const summary = $(`#${prefix}SizeSummary`);
   if (!summary) return;
   const targetSize = formatOutputDimensions(parseOutputDimensions(getImageOutputSize(scope)));
-  summary.textContent = actualSize ? `目标：${targetSize} · 实际：${actualSize}` : `输出尺寸：${targetSize}`;
+  summary.textContent = actualSize ? `目标：${targetSize} · 实际：${actualSize}` : `请求尺寸：${targetSize}`;
   summary.classList.toggle('output-size-mismatch', Boolean(actualSize && actualSize !== targetSize));
 }
 async function inspectGeneratedImage(source) {
@@ -474,28 +474,77 @@ function migrateLegacyImageSettings(settings, scope = 'image') {
   if (!settings[`${prefix}Ratio`] && legacySize) settings[`${prefix}Ratio`] = inferRatioFromLegacySize(legacySize);
   return settings;
 }
-const imageControls = ['imageSubject', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'imageQuality', 'imageRatio', 'lensSlider', 'detailSlider', 'styleSlider', 'negativePrompt'];
 function buildImagePrompt() {
   updateOutputSizeSummary('image');
-  if (!$('#useImageControls').checked) return;
-  const subject = $('#imageSubject').value.trim() || '\u9ad8\u8d28\u91cf\u89c6\u89c9\u4f5c\u54c1';
-  const lens = $('#lensSlider').value;
-  const detail = $('#detailSlider').value;
-  const stylize = $('#styleSlider').value;
-  const negative = $('#negativePrompt').value.trim();
-  const prompt = `${subject}, ${$('#imageStyle').value}, ${lens}mm lens, ${$('#imageAngle').value}, ${$('#imageLight').value}, ${$('#imageComposition').value}, highly detailed, detail level ${detail}/100, stylization ${stylize}/100, professional visual quality, sharp focus, rich textures ${negative ? `, negative prompt: ${negative}` : ''} ${$('#imageRatio').value}`;
-  imagePrompt.value = prompt;
-  imageCount.textContent = `${prompt.length} \u5b57`;
-  $('#lensValue').textContent = `${lens}mm`;
-  $('#detailValue').textContent = `${detail}%`;
-  $('#styleValue').textContent = `${stylize}%`;
-  updateOutputSizeSummary('image');
+  syncImagePromptControlState();
 }
-imageControls.forEach(id => $(`#${id}`).addEventListener('input', buildImagePrompt));
-imageControls.forEach(id => $(`#${id}`).addEventListener('change', buildImagePrompt));
+const imageOutputControls = ['imageQuality', 'imageRatio'];
+const imagePromptControls = ['imageSubject', 'imageStyle', 'imageAngle', 'imageLight', 'imageComposition', 'lensSlider', 'detailSlider', 'styleSlider', 'negativePrompt'];
+const imagePromptAdditions = new Map();
+let imagePromptBase = '';
+let lastManagedImagePrompt = '';
+function getSelectedOptionText(id) {
+  const field = $(`#${id}`);
+  return field?.selectedOptions?.[0]?.textContent?.trim() || field?.value || '';
+}
+function updateImagePromptCount() { imageCount.textContent = `${imagePrompt.value.length} \u5b57`; }
+function updateImageControlLabels() {
+  $('#lensValue').textContent = `${$('#lensSlider').value}\u6beb\u7c73`;
+  $('#detailValue').textContent = `${$('#detailSlider').value}%`;
+  $('#styleValue').textContent = `${$('#styleSlider').value}%`;
+}
+function getImagePromptFragment(id) {
+  const value = $(`#${id}`)?.value?.trim?.() ?? '';
+  if (!value) return '';
+  const fragments = {
+    imageSubject: `\u753b\u9762\u4e3b\u4f53\uff1a${value}`,
+    imageStyle: `\u89c6\u89c9\u98ce\u683c\uff1a${getSelectedOptionText(id)}`,
+    imageAngle: `\u89c6\u89d2\uff1a${getSelectedOptionText(id)}`,
+    imageLight: `\u5149\u7ebf\u6c1b\u56f4\uff1a${getSelectedOptionText(id)}`,
+    imageComposition: `\u6784\u56fe\u65b9\u5f0f\uff1a${getSelectedOptionText(id)}`,
+    lensSlider: `\u955c\u5934\u7126\u6bb5\uff1a${value}\u6beb\u7c73`,
+    detailSlider: `\u7ec6\u8282\u5f3a\u5ea6\uff1a${value}%`,
+    styleSlider: `\u98ce\u683c\u5316\u7a0b\u5ea6\uff1a${value}%`,
+    negativePrompt: `\u907f\u514d\u51fa\u73b0\uff1a${value}`
+  };
+  return fragments[id] || '';
+}
+function syncImagePromptControlState() {
+  imagePromptAdditions.clear();
+  imagePromptBase = imagePrompt.value.trim();
+  lastManagedImagePrompt = imagePrompt.value;
+  updateImagePromptCount();
+  updateImageControlLabels();
+}
+function applyImagePromptControl(id) {
+  if (!$('#useImageControls').checked) return;
+  if (imagePrompt.value !== lastManagedImagePrompt) {
+    imagePromptAdditions.clear();
+    imagePromptBase = imagePrompt.value.trim();
+  }
+  const fragment = getImagePromptFragment(id);
+  if (fragment) imagePromptAdditions.set(id, fragment);
+  else imagePromptAdditions.delete(id);
+  imagePrompt.value = [imagePromptBase, ...imagePromptAdditions.values()].filter(Boolean).join('\uff0c');
+  lastManagedImagePrompt = imagePrompt.value;
+  updateImagePromptCount();
+}
+imagePrompt.addEventListener('input', () => {
+  if (imagePrompt.value !== lastManagedImagePrompt) {
+    imagePromptAdditions.clear();
+    imagePromptBase = imagePrompt.value.trim();
+  }
+  updateImagePromptCount();
+});
+imagePromptControls.forEach(id => {
+  const field = $(`#${id}`);
+  const eventName = field?.tagName === 'SELECT' ? 'change' : 'input';
+  field?.addEventListener(eventName, () => { updateImageControlLabels(); applyImagePromptControl(id); });
+});
+imageOutputControls.forEach(id => $(`#${id}`)?.addEventListener('change', () => updateOutputSizeSummary('image')));
 ['directI2IQuality', 'directI2IRatio'].forEach(id => { $(`#${id}`).addEventListener('input', () => updateOutputSizeSummary('directI2I')); $(`#${id}`).addEventListener('change', () => updateOutputSizeSummary('directI2I')); });
 updateOutputSizeSummary('directI2I');
-$('#useImageControls').addEventListener('change', event => { const enabled = event.target.checked; $('#imageControlsStatus').textContent = enabled ? '已开启：风格、镜头、光线和滑块会写入提示词' : '已关闭：保留你手动输入的提示词，不会自动改写'; if (enabled) buildImagePrompt(); showToast(enabled ? '已启用通用提示词控件' : '已关闭通用提示词控件'); });
+$('#useImageControls').addEventListener('change', event => { const enabled = event.target.checked; $('#imageControlsStatus').textContent = enabled ? '已开启：修改哪个控件，就只写入对应内容' : '已关闭：保留手动输入的提示词，不会自动写入'; if (enabled) buildImagePrompt(); showToast(enabled ? '已启用通用提示词控件' : '已关闭通用提示词控件'); });
 $('#imageCopyButton').addEventListener('click', async () => { if (!imagePrompt.value) return; showToast(await copyText(imagePrompt.value) ? '\u751f\u56fe\u63d0\u793a\u8bcd\u5df2\u590d\u5236' : '\u590d\u5236\u5931\u8d25\uff0c\u8bf7\u957f\u6309\u6587\u5b57\u590d\u5236'); });
 $('#useImagePromptButton').addEventListener('click', () => { rawInput.value = imagePrompt.value; updateCount(); activatePanel('prompt', '#rawInput'); showToast('\u5df2\u5e26\u5165\u901a\u7528\u4f18\u5316\u5668'); });
 // The director panel is optional and has been removed from this release.
@@ -682,7 +731,7 @@ async function analyzeThenGenerate() {
   if (!config.apiKey || !config.baseUrl || !config.model) { settingsDialog.showModal(); showToast('\u8bf7\u5148\u914d\u7f6e\u89c6\u89c9\u62c6\u56fe\u6a21\u578b'); return; }
   const button = $('#analyzeThenGenerateButton'); button.disabled = true; button.innerHTML = '\u2026 <span>\u89c6\u89c9\u5206\u6790\u4e2d</span>';
   try {
-    const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: config.model, temperature: 0.35, messages: [{ role: 'system', content: 'Analyze the reference image for image-to-image generation. Return only one detailed English production prompt. Include subject, composition, camera, lighting, palette, materials, texture, and style. Do not mention that you are analyzing an image.' }, { role: 'user', content: [{ type: 'text', text: 'Create a detailed image-to-image prompt based on this reference.' }, { type: 'image_url', image_url: { url: imageReferenceData } }] }] }) });
+    const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: config.model, temperature: 0.35, messages: [{ role: 'system', content: '\u5206\u6790\u53c2\u8003\u56fe\uff0c\u751f\u6210\u4e00\u6bb5\u53ef\u7528\u4e8e\u56fe\u751f\u56fe\u7684\u8be6\u7ec6\u4e2d\u6587\u63d0\u793a\u8bcd\u3002\u5305\u542b\u4e3b\u4f53\u3001\u6784\u56fe\u3001\u955c\u5934\u3001\u5149\u7ebf\u3001\u8272\u5f69\u3001\u6750\u8d28\u3001\u7eb9\u7406\u548c\u98ce\u683c\u3002\u53ea\u8f93\u51fa\u4e2d\u6587\u63d0\u793a\u8bcd\uff0c\u4e0d\u8981\u8bf4\u660e\u6b63\u5728\u5206\u6790\u56fe\u7247\u3002' }, { role: 'user', content: [{ type: 'text', text: '\u8bf7\u6839\u636e\u8fd9\u5f20\u53c2\u8003\u56fe\u751f\u6210\u8be6\u7ec6\u56fe\u751f\u56fe\u63d0\u793a\u8bcd\u3002' }, { type: 'image_url', image_url: { url: imageReferenceData } }] }] }) });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json(); const analyzedPrompt = data.choices?.[0]?.message?.content?.trim();
     if (!analyzedPrompt) throw new Error('\u89c6\u89c9\u6a21\u578b\u6ca1\u6709\u8fd4\u56de\u63d0\u793a\u8bcd');
@@ -700,7 +749,7 @@ async function generateImage() {
   try {
     let response;
     if (imageGenerateMode === 'image') {
-      const form = new FormData(); form.append('model', imageModel); form.append('prompt', buildI2IPrompt(imagePrompt.value, $('#imageStyle').value, 20, $('#styleSlider').value, $('#negativePrompt').value)); appendImageRequestOptions(form, 'image', imageModel); form.append('image', imageFile, imageFile.name); appendImageReferenceFidelity(form, config, imageModel);
+      const form = new FormData(); form.append('model', imageModel); form.append('prompt', buildI2IPrompt(imagePrompt.value, getSelectedOptionText('imageStyle'), 20, $('#styleSlider').value, $('#negativePrompt').value)); appendImageRequestOptions(form, 'image', imageModel); form.append('image', imageFile, imageFile.name); appendImageReferenceFidelity(form, config, imageModel);
       response = await apiRequest(endpoint, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     } else {
       response = await apiRequest(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: imageModel, prompt: imagePrompt.value, ...getImageRequestOptions('image', imageModel) }) });
@@ -722,7 +771,7 @@ async function optimizeImagePrompt() {
   if (!config.apiKey || !config.baseUrl || !config.model) { settingsDialog.showModal(); showToast('\u8bf7\u5148\u914d\u7f6e\u6587\u672c\u4f18\u5316\u6a21\u578b'); return; }
   const button = $('#optimizeImageButton'); button.disabled = true; button.innerHTML = '\u2026 <span>\u4f18\u5316\u4e2d</span>';
   try {
-    const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: config.model, temperature: 0.6, messages: [{ role: 'system', content: 'You are an expert image prompt engineer. Rewrite the user prompt into one detailed production-ready English text-to-image prompt. Keep the intended subject, improve composition, lighting, materials, and quality. Output only the prompt.' }, { role: 'user', content: draft }] }) });
+    const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: config.model, temperature: 0.6, messages: [{ role: 'system', content: '\u4f60\u662f\u4e13\u4e1a\u7684\u4e2d\u6587\u751f\u56fe\u63d0\u793a\u8bcd\u5de5\u7a0b\u5e08\u3002\u628a\u7528\u6237\u63d0\u793a\u8bcd\u6539\u5199\u6210\u4e00\u6bb5\u53ef\u76f4\u63a5\u7528\u4e8e\u751f\u56fe\u7684\u8be6\u7ec6\u4e2d\u6587\u63d0\u793a\u8bcd\uff0c\u4fdd\u7559\u539f\u610f\u3002\u8865\u8db3\u6784\u56fe\u3001\u5149\u7ebf\u3001\u6750\u8d28\u4e0e\u753b\u8d28\u63cf\u8ff0\u3002\u53ea\u8f93\u51fa\u4e2d\u6587\u63d0\u793a\u8bcd\uff0c\u4e0d\u8981\u89e3\u91ca\uff0c\u4e0d\u8981\u8f93\u51fa\u82f1\u6587\u3002' }, { role: 'user', content: draft }] }) });
     if (!response.ok) throw new Error(`HTTP ${response.status}`); const data = await response.json(); const optimized = data.choices?.[0]?.message?.content?.trim(); if (!optimized) throw new Error('\u6a21\u578b\u6ca1\u6709\u8fd4\u56de\u4f18\u5316\u7ed3\u679c'); imagePrompt.value = optimized; imageCount.textContent = `${optimized.length} \u5b57`; showToast('\u751f\u56fe\u63d0\u793a\u8bcd\u4f18\u5316\u5b8c\u6210');
   } catch (error) { showToast(`\u4f18\u5316\u5931\u8d25\uff1a${error.message}`); }
   finally { button.disabled = false; button.innerHTML = '\u2726 <span>\u4f18\u5316\u751f\u56fe\u8bcd</span>'; }
@@ -744,7 +793,7 @@ async function analyzeImage() {
   const detail = $('#breakdownDetail').value; const language = $('#breakdownLanguage').value;
   const quickInstruction = `你是一位图生图提示词工程师。对参考图做“快速概括”，只输出两小段，总字数不超过 150 个汉字加 80 个英文词，绝不输出分析过程、编号或解释。\n\n第一段用中文，格式必须是：\n“照片转[概括后的目标风格]提示词：视觉风格、色彩气质与材质/印刷质感，保留真实照片中人物的面部神态、五官比例、表情特征、发型轮廓、身体姿态与主体识别度，将其转换为一张[合适的画面类型/比例]作品。”\n如果参考图无人像，则删除人物保留句，改为保留主体轮廓与识别度。\n\n第二段以“整体采用：”开头，紧跟一条逗号分隔的英文图生图提示词，仅提炼最关键的风格、媒介、色彩、光线、构图和质感标签。不要复述具体人物、物品、文字、地点或故事。`;
   const detailedInstruction = `你是一位资深视觉风格分析师和提示词工程师。请对这张参考图进行${detail}的“纯风格 DNA”拆解，输出语言为${language}。严格禁止描述、复述或猜测图中的任何主体、人物、物体、动作、文字、标识、地点、服饰、道具、具体场景或叙事内容；即使这些内容显眼也必须忽略。目标是让用户能把风格迁移到全新的主体上，而不是复刻原图。请严格按以下结构输出：\n\n1. 风格总览：艺术流派、时代气质、媒介感\n2. 构图语法：只描述抽象构图规律、留白、层次、视觉动线，不出现具体主体或位置描述\n3. 镜头与空间：景别、透视、焦段倾向、景深、距离感的通用规律\n4. 光线与氛围：方向、光质、反差、阴影、环境氛围\n5. 色彩系统：主辅色关系、冷暖、饱和度、对比度、分级方法\n6. 材质与纹理：颗粒、笔触、纸张、网点、反射、磨损等\n7. 后期与画质：锐度、动态范围、渲染或印刷特征\n8. 可复用风格关键词\n9. 反向提示词：避免复刻原图主体、文字、标识、原始场景\n10. FINAL STYLE PROMPT：输出一段只包含风格、构图语法、镜头、光线、色彩、材质和画质的英文提示词；绝不能包含或暗示原图主体、物体、人物、文字、地点和场景。`;
-  const instruction = detail === '快速概括' ? quickInstruction : detailedInstruction;
+  const instruction = `\u4f60\u662f\u8d44\u6df1\u89c6\u89c9\u98ce\u683c\u5206\u6790\u5e08\u548c\u751f\u56fe\u63d0\u793a\u8bcd\u5de5\u7a0b\u5e08\u3002\u8bf7\u5bf9\u53c2\u8003\u56fe\u8fdb\u884c${detail}\u7684\u201c\u7eaf\u98ce\u683c DNA\u201d\u62c6\u89e3\u3002\u4e25\u7981\u63cf\u8ff0\u3001\u590d\u8ff0\u6216\u731c\u6d4b\u56fe\u4e2d\u7684\u4e3b\u4f53\u3001\u4eba\u7269\u3001\u7269\u4f53\u3001\u52a8\u4f5c\u3001\u6587\u5b57\u3001\u5730\u70b9\u548c\u5177\u4f53\u573a\u666f\u3002\u53ea\u8f93\u51fa\u4e2d\u6587\uff0c\u4e0d\u8981\u8f93\u51fa\u82f1\u6587\u3002\n\n\u8bf7\u4f9d\u6b21\u8f93\u51fa\uff1a\n1. \u98ce\u683c\u603b\u89c8\n2. \u6784\u56fe\u8bed\u6cd5\n3. \u955c\u5934\u4e0e\u7a7a\u95f4\n4. \u5149\u7ebf\u4e0e\u6c1b\u56f4\n5. \u8272\u5f69\u7cfb\u7edf\n6. \u6750\u8d28\u4e0e\u7eb9\u7406\n7. \u540e\u671f\u4e0e\u753b\u8d28\n8. \u53ef\u590d\u7528\u98ce\u683c\u5173\u952e\u8bcd\n9. \u53cd\u5411\u63d0\u793a\u8bcd\n10. \u6700\u7ec8\u98ce\u683c\u63d0\u793a\u8bcd\uff1a\u8f93\u51fa\u4e00\u6bb5\u53ea\u542b\u98ce\u683c\u3001\u6784\u56fe\u3001\u955c\u5934\u3001\u5149\u7ebf\u3001\u8272\u5f69\u3001\u6750\u8d28\u548c\u753b\u8d28\u7684\u4e2d\u6587\u63d0\u793a\u8bcd\uff0c\u4e0d\u542b\u4efb\u4f55\u539f\u56fe\u4e3b\u4f53\u4fe1\u606f\u3002`;
   try {
     const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` }, body: JSON.stringify({ model: config.model, temperature: 0.25, max_tokens: $('#breakdownDetail').selectedIndex === 2 ? 700 : 1800, messages: [{ role: 'system', content: instruction }, { role: 'user', content: [{ type: 'text', text: '\u8bf7\u5f00\u59cb\u5206\u6790\u8fd9\u5f20\u56fe\u7247\u3002' }, { type: 'image_url', image_url: { url: breakdownImageData } }] }] }) });
     if (!response.ok) { const detailText = await response.text(); throw new Error(`HTTP ${response.status} ${detailText.slice(0, 160)}`); }
@@ -754,7 +803,7 @@ async function analyzeImage() {
 }
 $('#analyzeImageButton').addEventListener('click', analyzeImage);
 $('#copyBreakdownButton').addEventListener('click', async () => { if (!lastBreakdown) return showToast('\u8fd8\u6ca1\u6709\u53ef\u590d\u5236\u7684\u62c6\u89e3\u7ed3\u679c'); showToast(await copyText(lastBreakdown) ? '\u62c6\u89e3\u7ed3\u679c\u5df2\u590d\u5236' : '\u590d\u5236\u5931\u8d25\uff0c\u8bf7\u957f\u6309\u6587\u5b57\u590d\u5236'); });
-function getBreakdownStylePrompt() { const quick = lastBreakdown.match(/整体采用：\s*([\s\S]+)/); return (quick?.[1] || lastBreakdown.split(/FINAL STYLE PROMPT:/i).pop() || '').trim(); }
+function getBreakdownStylePrompt() { const quick = lastBreakdown.match(/整体采用：\s*([\s\S]+)/); return (quick?.[1] || lastBreakdown.split(/最终风格提示词：|FINAL STYLE PROMPT:/i).pop() || '').trim(); }
 $('#sendToTextToImageButton').addEventListener('click', () => { const prompt = getBreakdownStylePrompt(); if (!prompt) return showToast('\u8bf7\u5148\u5b8c\u6210\u62c6\u56fe'); imagePrompt.value = prompt; imageCount.textContent = `${prompt.length} \u5b57`; activatePanel('image', '#imagePrompt'); showToast('\u5df2\u5e26\u5165\u6587\u751f\u56fe'); });
 const DIRECT_I2I_MAX_REFERENCES = 6;
 let directI2IFiles = [];
@@ -815,7 +864,7 @@ async function generateDirectI2I() {
   if (!config.apiKey || !config.baseUrl || !config.model) { settingsDialog.showModal(); showToast('\u8bf7\u5148\u914d\u7f6e\u751f\u56fe\u6a21\u578b'); return; }
   const button = $('#generateDirectI2IButton'); directI2IResultUrl = ''; $('#saveDirectI2IButton').disabled = true; button.disabled = true; button.innerHTML = '\u2026 <span>\u56fe\u751f\u56fe\u4e2d</span>';
   try {
-    const fullPrompt = `${buildI2IPrompt(prompt, $('#directI2IStyle').value, $('#directI2IPoseStrength').value, $('#directI2IStrength').value, $('#directI2INegative').value)} ${directI2IFiles.length > 1 ? `Multiple numbered reference images are attached. Their roles are defined entirely by the user's prompt. Follow the explicit references to image 1, image 2, and so on; do not assume that any image is a person, subject, style, or composition anchor.` : ''}`.trim(); lastGenerationKind = 'image-to-image';
+    const fullPrompt = `${buildI2IPrompt(prompt, getSelectedOptionText('directI2IStyle'), $('#directI2IPoseStrength').value, $('#directI2IStrength').value, $('#directI2INegative').value)} ${directI2IFiles.length > 1 ? '\u5df2\u6309\u7f16\u53f7\u9644\u52a0\u591a\u5f20\u53c2\u8003\u56fe\u3002\u56fe 1\u3001\u56fe 2 \u7b49\u7684\u7528\u9014\u4ee5\u7528\u6237\u63d0\u793a\u8bcd\u4e2d\u7684\u660e\u786e\u8bf4\u660e\u4e3a\u51c6\uff0c\u4e0d\u8981\u64c5\u81ea\u5047\u5b9a\u4efb\u610f\u56fe\u7247\u662f\u4eba\u7269\u3001\u4e3b\u4f53\u3001\u98ce\u683c\u6216\u6784\u56fe\u53c2\u8003\u3002' : ''}`.trim(); lastGenerationKind = 'image-to-image';
     const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); appendImageRequestOptions(form, 'directI2I', config.model); directI2IFiles.forEach(file => form.append('image', file, file.name)); appendImageReferenceFidelity(form, config, config.model);
     const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/images/edits`, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     if (!response.ok) { const detail = await response.text(); throw new Error(`HTTP ${response.status} ${detail.slice(0, 180)}`); }
@@ -825,16 +874,16 @@ async function generateDirectI2I() {
 }
 $('#generateDirectI2IButton').addEventListener('click', generateDirectI2I);
 const imagePresets = [
-  ['富士胶片人像', 'Fujifilm Superia film portrait, soft daylight, gentle green and cyan cast, subtle film grain, natural skin tone, candid editorial photography'],
-  ['复古印刷海报', 'retro art poster, risograph-inspired photo treatment, screen print grain, limited ink palette, vintage magazine cover aesthetic'],
-  ['CCD 闪光夜拍', 'early 2000s CCD camera flash photography, direct flash, nightlife candid, cool blue shadows, slight motion blur, nostalgic digital grain'],
-  ['日杂清透', 'Japanese lifestyle magazine photography, clean natural light, airy composition, soft pastel color grading, relaxed editorial mood'],
-  ['港风霓虹', 'Hong Kong neon night photography, saturated red and cyan practical lights, cinematic rain reflections, urban film still'],
-  ['法式杂志', 'French fashion editorial, soft window light, muted cream and wine palette, refined texture, effortless composition'],
-  ['油画肖像', 'classical oil portrait painting, visible brushwork, museum canvas texture, dramatic soft chiaroscuro, rich pigments'],
-  ['梦核柔焦', 'dreamcore photography, soft focus, hazy glow, pastel liminal atmosphere, gentle surreal color palette'],
-  ['赛博机能', 'cyberpunk fashion portrait, neon rim lighting, wet reflective surfaces, futuristic city atmosphere, high contrast'],
-  ['黑白电影', 'black and white cinematic portrait, silver gelatin film grain, dramatic side light, deep shadows, timeless editorial frame']
+  ['富士胶片人像', '富士胶片人像，柔和日光，自然肤色，青绿偏色，细腻胶片颗粒，杂志抓拍感'],
+  ['复古印刷海报', '复古艺术印刷海报，孔版印刷质感，网版颗粒，限色印墨，旧杂志封面编排'],
+  ['CCD 闪光夜拍', '千禧年数码相机直闪夜拍，蓝色阴影，轻微动感模糊，怀旧数码颗粒，随拍氛围'],
+  ['日杂清透', '日系生活杂志摄影，干净自然光，透气留白，柔和粉彩色调，放松编辑感'],
+  ['港风霓虹', '港风需虹夜景，高饱和红青光源，雨后路面反射，城市电影剧照氛围'],
+  ['法式杂志', '法式时装杂志风，柔和窗边光，低饱和乳白与酒红配色，精致质感，自然构图'],
+  ['油画肖像', '古典油画肖像，清晰笔触，美术馆画布纹理，戏剧性柔光，浓郁色彩'],
+  ['梦核柔焦', '梦幻柔焦摄影，柔焦光晕，迷雾感氛围，柔和粉彩色调，轻微超现实质感'],
+  ['赛博机能', '赛博未来主义时尚人像，需虹边缘光，潮湿反射材质，未来城市氛围，高反差'],
+  ['黑白电影', '黑白电影人像，银盐胶片颗粒，戏剧性侧光，深郁阴影，经典编辑画面']
 ];
 $('#quickPresets').innerHTML = imagePresets.map(([name], index) => `<button class="quick-preset" data-preset-index="${index}" type="button">${name}</button>`).join('');
 $('#quickPresets').addEventListener('click', event => { const button = event.target.closest('[data-preset-index]'); if (!button) return; const [name, prompt] = imagePresets[Number(button.dataset.presetIndex)]; $('#directI2IPrompt').value = prompt; showToast(`已应用“${name}”，请点击生成图生图`); });
@@ -842,30 +891,32 @@ function appendImageReferenceFidelity(form, config, model) {
   if (config.provider === 'openai' && /^gpt-image-1(?:\.5)?$/i.test(model)) form.append('input_fidelity', 'high');
 }
 function buildI2IPrompt(prompt, style, poseStrength, styleStrength, negative) {
+  return buildChineseI2IPrompt(prompt, style, poseStrength, styleStrength, negative);
+}
+function buildChineseI2IPrompt(prompt, style, poseStrength, styleStrength, negative) {
   const styleLevel = Number(styleStrength);
   const referenceLevel = Number(poseStrength);
   const transformation = styleLevel <= 30
-    ? 'Make only subtle refinements to lighting, color, texture, and styling.'
+    ? '\u53ea\u5bf9\u5149\u7ebf\u3001\u8272\u5f69\u3001\u7eb9\u7406\u548c\u9020\u578b\u505a\u8f7b\u5fae\u8c03\u6574\u3002'
     : styleLevel <= 70
-      ? 'Make clear stylistic and environmental changes while keeping the referenced person unmistakably the same.'
-      : 'Apply a bold transformation to style, clothing, background, lighting, and artistic treatment, but never replace the referenced person.';
+      ? '\u660e\u663e\u6539\u53d8\u753b\u9762\u98ce\u683c\u548c\u73af\u5883\uff0c\u4f46\u4fdd\u6301\u53c2\u8003\u4eba\u7269\u6e05\u6670\u53ef\u8fa8\u3002'
+      : '\u5927\u5e45\u6539\u53d8\u98ce\u683c\u3001\u670d\u88c5\u3001\u80cc\u666f\u3001\u5149\u7ebf\u548c\u827a\u672f\u5904\u7406\uff0c\u4f46\u7edd\u4e0d\u66f4\u6362\u53c2\u8003\u4eba\u7269\u3002';
   const referenceDirection = referenceLevel <= 20
-    ? 'Keep only the reference face identity. Freely generate a new expression, pose, action, body gesture, and outfit from the user prompt and target style.'
+    ? '\u53ea\u4fdd\u7559\u53c2\u8003\u56fe\u4eba\u7269\u7684\u8138\u90e8\u8eab\u4efd\u3002\u8868\u60c5\u3001\u59ff\u52bf\u3001\u52a8\u4f5c\u3001\u8eab\u4f53\u8d44\u6001\u548c\u670d\u88c5\u53ef\u4ee5\u7531\u7528\u6237\u63d0\u793a\u8bcd\u4e0e\u76ee\u6807\u98ce\u683c\u91cd\u65b0\u8bbe\u8ba1\u3002'
     : referenceLevel <= 60
-      ? 'Keep the reference face identity and broadly similar body proportions, but allow the user prompt to substantially reinterpret expression, pose, action, and outfit.'
+      ? '\u4fdd\u7559\u53c2\u8003\u56fe\u4eba\u7269\u7684\u8138\u90e8\u8eab\u4efd\u548c\u5927\u4f53\u8eab\u6750\u6bd4\u4f8b\uff0c\u5141\u8bb8\u6839\u636e\u7528\u6237\u63d0\u793a\u8bcd\u5927\u5e45\u91cd\u65b0\u8bbe\u8ba1\u8868\u60c5\u3001\u59ff\u52bf\u3001\u52a8\u4f5c\u548c\u670d\u88c5\u3002'
       : referenceLevel <= 85
-        ? 'Keep the reference face identity, expression mood, pose, gesture, and outfit direction broadly recognizable, allowing only natural stylistic adaptation.'
-        : 'Faithfully preserve the reference face identity, expression, pose, gesture, body posture, and outfit while applying the requested image style.';
+        ? '\u4fdd\u7559\u53c2\u8003\u56fe\u4eba\u7269\u7684\u8138\u90e8\u8eab\u4efd\u3001\u8868\u60c5\u6c14\u8d28\u3001\u59ff\u52bf\u3001\u52a8\u4f5c\u548c\u670d\u88c5\u65b9\u5411\uff0c\u53ea\u505a\u81ea\u7136\u7684\u98ce\u683c\u5316\u9002\u914d\u3002'
+        : '\u5728\u5e94\u7528\u76ee\u6807\u753b\u9762\u98ce\u683c\u7684\u540c\u65f6\uff0c\u9ad8\u5ea6\u8fd8\u539f\u53c2\u8003\u56fe\u4eba\u7269\u7684\u8138\u90e8\u8eab\u4efd\u3001\u8868\u60c5\u3001\u59ff\u52bf\u3001\u52a8\u4f5c\u3001\u8eab\u4f53\u59ff\u6001\u548c\u670d\u88c5\u3002';
   return [
-    'REFERENCE IMAGE IS A BINDING FACE IDENTITY REFERENCE. The generated person must have the same face identity and recognizable facial features as the reference image at every setting. Never swap the face, gender, age group, or identity.',
-    'Re-render the entire person natively inside the requested style and scene. The face, skin, hair, clothing, materials, color grading, lighting, shadows, and texture must all belong to the same coherent target art direction, never like a pasted photographic cutout.',
-    'Keep the person as the main subject. The full image may be artistically reinterpreted, but the face must remain recognizably the same person.',
-    `Person reference fidelity: ${poseStrength}%. ${referenceDirection}`,
-    `Style and scene transformation: ${styleStrength}%. ${transformation}`,
-    `Requested visual direction: ${style}.`,
-    prompt ? `User-requested changes: ${prompt}` : '',
-    'Never turn this into a text-only generation. Never ignore the uploaded reference image. Avoid: different person, identity loss, gender swap, age swap, face replacement, unrelated subject, missing subject.',
-    negative ? `Additional avoid list: ${negative}.` : ''
+    '\u53c2\u8003\u56fe\u662f\u4eba\u7269\u8eab\u4efd\u7684\u4f9d\u636e\u3002\u751f\u6210\u4eba\u7269\u5fc5\u987b\u4fdd\u6301\u540c\u4e00\u5f20\u8138\u3001\u53ef\u8fa8\u8ba4\u7684\u4e94\u5b98\u7279\u5f81\u4e0e\u8eab\u4efd\uff0c\u7981\u6b62\u6362\u8138\u3001\u6539\u53d8\u6027\u522b\u3001\u5e74\u9f84\u6216\u4eba\u7269\u8eab\u4efd\u3002',
+    '\u4eba\u7269\u7684\u9762\u90e8\u3001\u80a4\u8272\u3001\u53d1\u578b\u3001\u670d\u88c5\u3001\u6750\u8d28\u3001\u8272\u8c03\u3001\u5149\u5f71\u548c\u7eb9\u7406\u90fd\u5e94\u5f53\u539f\u751f\u878d\u5165\u76ee\u6807\u98ce\u683c\u4e0e\u573a\u666f\uff0c\u4e0d\u5f97\u5448\u73b0\u4e3a\u7a81\u5140\u7684\u7167\u7247\u526a\u8d34\u6548\u679c\u3002',
+    `\u4eba\u7269\u53c2\u8003\u8fd8\u539f\u5ea6：${poseStrength}%。${referenceDirection}`,
+    `\u98ce\u683c\u4e0e\u573a\u666f\u6539\u52a8\u7a0b\u5ea6：${styleStrength}%。${transformation}`,
+    `\u76ee\u6807\u89c6\u89c9\u65b9\u5411：${style}。`,
+    prompt ? `\u7528\u6237\u8981\u6c42：${prompt}` : '',
+    '\u5fc5\u987b\u4ee5\u5df2\u4e0a\u4f20\u7684\u53c2\u8003\u56fe\u4e3a\u4f9d\u636e\u8fdb\u884c\u56fe\u751f\u56fe，\u4e0d\u5f97\u5ffd\u7565\u53c2\u8003\u56fe，\u907f\u514d\u751f\u6210\u4e0d\u540c\u4eba\u7269\u3001\u8eab\u4efd\u4e22\u5931\u3001\u6362\u6027\u522b\u3001\u6362\u5e74\u9f84\u3001\u6362\u8138\u3001\u65e0\u5173\u4e3b\u4f53\u6216\u7f3a\u5931\u4e3b\u4f53\u3002',
+    negative ? `\u989d\u5916\u907f\u514d：${negative}。` : ''
   ].filter(Boolean).join('\n');
 }
 function makeImageFilename(kind) { return `prompt-pop-${kind}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.png`; }
@@ -1085,7 +1136,7 @@ function setPresetFieldValues(settings, ids) {
   });
 }
 function refreshPresetControlLabels() {
-  $('#lensValue').textContent = $('#lensSlider').value + 'mm';
+  $('#lensValue').textContent = $('#lensSlider').value + '\u6beb\u7c73';
   $('#detailValue').textContent = $('#detailSlider').value + '%';
   $('#styleValue').textContent = $('#styleSlider').value + '%';
   $('#directI2IPoseStrengthValue').textContent = $('#directI2IPoseStrength').value + '%';
@@ -1385,16 +1436,14 @@ async function restoreWorkspaceState() {
     const nativeImage = await requestLastGeneratedImage();
     if (nativeImage?.source) { lastGenerationKind = nativeImage.kind || lastGenerationKind || 'text-to-image'; renderRecoveredImage(lastGenerationKind, nativeImage.source); queueWorkspacePersist(); }
   } catch { /* A deleted gallery image should not block the page. */ }
-  ['lensSlider', 'detailSlider', 'styleSlider', 'directI2IPoseStrength', 'directI2IStrength'].forEach(id => $(`#${id}`)?.dispatchEvent(new Event('input')));
-  updateOutputSizeSummary('image');
-  updateOutputSizeSummary('directI2I');
+  refreshPresetControlLabels();
   updateCount();
 }
 document.addEventListener('input', event => { if (!event.target.closest('#settingsDialog')) queueWorkspacePersist(); });
 document.addEventListener('change', event => { if (!event.target.closest('#settingsDialog')) queueWorkspacePersist(); });
 window.addEventListener('pagehide', () => { saveWorkspaceFallback(collectWorkspaceState()); persistWorkspaceState(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { saveWorkspaceFallback(collectWorkspaceState()); persistWorkspaceState(); } });
-Promise.all([restoreWorkspaceState(), loadImagePresets()]).finally(() => { if (!imagePrompt.value) buildImagePrompt(); });
+Promise.all([restoreWorkspaceState(), loadImagePresets()]).finally(() => { syncImagePromptControlState(); updateOutputSizeSummary('image'); });
 
 async function optimize() {
   const idea = rawInput.value.trim();
