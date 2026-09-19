@@ -5,6 +5,9 @@ let mainWindow;
 let tray;
 let isQuitting = false;
 let activityLabel = '待命';
+const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
+const UPDATE_ASSET_ROOT = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/';
+const UPDATE_FILES = ['index.html', 'styles.css', 'app.js'];
 
 function getPresetFilePath() {
   return path.join(app.getPath('userData'), 'prompt-pop-presets.json');
@@ -29,6 +32,59 @@ async function writePresets(value) {
   await fs.writeFile(temporaryPath, JSON.stringify(presets), 'utf8');
   await fs.rename(temporaryPath, filePath);
   return filePath;
+}
+
+function getUpdateRoot() { return path.join(app.getPath('userData'), 'promptpop-update'); }
+function getUpdatedIndex() { return path.join(getUpdateRoot(), 'current', 'index.html'); }
+function isAllowedUpdateUrl(value) {
+  const url = new URL(value);
+  if (url.protocol !== 'https:' || url.host !== 'raw.githubusercontent.com') return false;
+  if (url.pathname === '/TTflysky/prompt-Pop/main/update.json') return true;
+  return UPDATE_FILES.some(file => url.pathname === `/TTflysky/prompt-Pop/main/${file}`);
+}
+async function fetchUpdateManifest() {
+  if (!isAllowedUpdateUrl(UPDATE_MANIFEST_URL)) throw new Error('更新地址不受支持');
+  const response = await fetch(`${UPDATE_MANIFEST_URL}?t=${Date.now()}`, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`更新服务器返回 HTTP ${response.status}`);
+  const manifest = await response.json();
+  if (!manifest.version) throw new Error('更新清单缺少版本号');
+  return manifest;
+}
+async function downloadUpdateFile(name, destination) {
+  const url = UPDATE_ASSET_ROOT + name;
+  if (!isAllowedUpdateUrl(url)) throw new Error('更新文件地址不受支持');
+  const response = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`无法下载 ${name}（HTTP ${response.status}）`);
+  await fs.writeFile(destination, Buffer.from(await response.arrayBuffer()));
+}
+async function applyHotUpdate() {
+  const manifest = await fetchUpdateManifest();
+  const root = getUpdateRoot();
+  const staging = path.join(root, 'staging');
+  const current = path.join(root, 'current');
+  const backup = path.join(root, 'backup');
+  await fs.rm(staging, { recursive: true, force: true });
+  await fs.mkdir(staging, { recursive: true });
+  try {
+    for (const file of UPDATE_FILES) await downloadUpdateFile(file, path.join(staging, file));
+    await fs.rm(backup, { recursive: true, force: true });
+    if (await fs.stat(current).catch(() => null)) await fs.rename(current, backup);
+    try {
+      await fs.rename(staging, current);
+    } catch (error) {
+      if (await fs.stat(backup).catch(() => null)) await fs.rename(backup, current);
+      throw error;
+    }
+    await fs.rm(backup, { recursive: true, force: true });
+    return manifest;
+  } catch (error) {
+    await fs.rm(staging, { recursive: true, force: true });
+    throw error;
+  }
+}
+function loadAppContent() {
+  const updatedIndex = getUpdatedIndex();
+  mainWindow.loadFile(updatedIndex, { hash: '' }).catch(() => mainWindow.loadFile(path.join(__dirname, '..', 'index.html')));
 }
 
 const isSupportedEndpoint = value => {
@@ -82,7 +138,7 @@ function createWindow() {
     autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false }
   });
-  mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
+  loadAppContent();
   mainWindow.on('close', event => { if (!isQuitting) { event.preventDefault(); mainWindow.hide(); } });
   mainWindow.on('minimize', event => { event.preventDefault(); mainWindow.hide(); });
 }
@@ -109,6 +165,9 @@ app.whenReady().then(() => {
   tray.on('click', showMainWindow);
   ipcMain.handle('prompt-pop:request', (_, payload) => createRequest(payload));
   ipcMain.handle('prompt-pop:version', () => app.getVersion());
+  ipcMain.handle('prompt-pop:check-update', () => fetchUpdateManifest());
+  ipcMain.handle('prompt-pop:apply-update', () => applyHotUpdate());
+  ipcMain.handle('prompt-pop:reload-updated-app', () => { loadAppContent(); return true; });
   ipcMain.handle('prompt-pop:get-presets', () => readPresets());
   ipcMain.handle('prompt-pop:save-presets', (_, value) => writePresets(value));
   ipcMain.on('prompt-pop:activity', (_, active) => { activityLabel = active ? '正在生成' : '待命'; refreshTray(); });

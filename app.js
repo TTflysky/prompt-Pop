@@ -36,7 +36,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.47';
+const APP_VERSION = '1.2.48';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -170,11 +170,12 @@ window.__nativeUpdateResponse = (id, status, body, error) => {
 };
 function compareVersions(left, right) { const a = String(left).split('.').map(Number); const b = String(right).split('.').map(Number); for (let i = 0; i < Math.max(a.length, b.length); i += 1) { const diff = (a[i] || 0) - (b[i] || 0); if (diff) return diff; } return 0; }
 function nativeUpdateRequest(method) { return new Promise((resolve, reject) => { const id = `update-${Date.now()}-${Math.random().toString(16).slice(2)}`; updateRequests.set(id, { resolve, reject }); window.PromptPopNative[method](id); }); }
+function desktopUpdateRequest(method) { return window.PromptPopDesktop?.[method] ? window.PromptPopDesktop[method]() : Promise.reject(new Error('桌面端热更新接口不可用')); }
 async function checkForUpdate() {
   const status = $('#updateStatus'); const checkButton = $('#checkUpdateButton'); const applyButton = $('#applyUpdateButton');
   checkButton.disabled = true; status.textContent = '正在检查 GitHub 更新...';
   try {
-    const update = window.PromptPopNative?.checkForUpdate ? await nativeUpdateRequest('checkForUpdate') : await (await fetch(UPDATE_MANIFEST_URL, { cache: 'no-store' })).json();
+    const update = window.PromptPopNative?.checkForUpdate ? await nativeUpdateRequest('checkForUpdate') : window.PromptPopDesktop?.checkForUpdate ? await desktopUpdateRequest('checkForUpdate') : await (await fetch(UPDATE_MANIFEST_URL, { cache: 'no-store' })).json();
     if (!update.version) throw new Error('未找到版本号');
     if (compareVersions(update.version, APP_VERSION) > 0) { availableUpdate = update; status.textContent = `发现 v${update.version}`; applyButton.hidden = false; applyButton.textContent = `更新至 v${update.version}`; }
     else { availableUpdate = null; applyButton.hidden = true; status.textContent = `已是最新版本 v${APP_VERSION}`; }
@@ -183,9 +184,15 @@ async function checkForUpdate() {
 }
 async function applyHotUpdate() {
   if (!availableUpdate) return checkForUpdate();
-  if (!window.PromptPopNative?.applyUpdate) return showToast('网页版不支持本地热更新');
+  if (!window.PromptPopNative?.applyUpdate && !window.PromptPopDesktop?.applyUpdate) return showToast('当前运行环境不支持本地热更新');
   const applyButton = $('#applyUpdateButton'); applyButton.disabled = true; $('#updateStatus').textContent = `正在更新至 v${availableUpdate.version}...`;
-  try { await nativeUpdateRequest('applyUpdate'); $('#updateStatus').textContent = '更新完成，正在重新加载...'; window.PromptPopNative.reloadUpdatedApp(); }
+  try {
+    if (window.PromptPopNative?.applyUpdate) await nativeUpdateRequest('applyUpdate');
+    else await desktopUpdateRequest('applyUpdate');
+    $('#updateStatus').textContent = '更新完成，正在重新加载...';
+    if (window.PromptPopNative?.reloadUpdatedApp) window.PromptPopNative.reloadUpdatedApp();
+    else if (window.PromptPopDesktop?.reloadUpdatedApp) await window.PromptPopDesktop.reloadUpdatedApp();
+  }
   catch (error) { applyButton.disabled = false; showToast(`更新失败：${error.message}`); }
 }
 function readFileDataUrl(file) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('Unable to read selected image')); reader.readAsDataURL(file); }); }
