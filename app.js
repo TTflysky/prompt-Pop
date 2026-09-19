@@ -36,7 +36,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.45';
+const APP_VERSION = '1.2.46';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -716,6 +716,26 @@ let imageReferenceData = '';
 let generatedImageUrl = '';
 let lastGenerationKind = '';
 function setImageGenerateMode(mode) { imageGenerateMode = mode; document.querySelectorAll('[data-generate-mode]').forEach(item => item.classList.toggle('active', item.dataset.generateMode === mode)); $('#generateImageButton').innerHTML = mode === 'image' ? '⌁ <span>图生图</span>' : '✦ <span>文生图</span>'; }
+function startGenerationAnimation(container, mode) {
+  const loader = document.createElement('div');
+  loader.className = 'generation-loader';
+  loader.setAttribute('role', 'status');
+  loader.setAttribute('aria-live', 'polite');
+  loader.innerHTML = `<div class="flower-stage" aria-hidden="true"><span class="flower-ground"></span><span class="flower-stem"></span><span class="flower-leaf flower-leaf-left"></span><span class="flower-leaf flower-leaf-right"></span><span class="flower-head"><i></i><i></i><i></i><i></i><b></b></span></div><strong data-generation-status>正在发芽</strong><span data-generation-progress>12%</span><small>${mode === 'image-to-image' ? '正在融合参考图与提示词' : '正在绘制你的画面'}</small>`;
+  container.replaceChildren(loader);
+  const progress = loader.querySelector('[data-generation-progress]');
+  const status = loader.querySelector('[data-generation-status]');
+  const startedAt = Date.now();
+  const timer = window.setInterval(() => {
+    const value = Math.min(88, 12 + Math.floor((Date.now() - startedAt) / 500));
+    progress.textContent = `${value}%`;
+    status.textContent = value < 28 ? '正在发芽' : value < 52 ? '正在长出花茎' : value < 76 ? '正在展开花瓣' : '正在等待模型返回';
+  }, 180);
+  return {
+    complete() { window.clearInterval(timer); loader.classList.add('is-complete'); progress.textContent = '100%'; status.textContent = '花朵盛开，图片即将出现'; },
+    fail() { window.clearInterval(timer); loader.classList.add('is-failed'); progress.textContent = '未完成'; status.textContent = '生成失败'; }
+  };
+}
 document.querySelectorAll('[data-generate-mode]').forEach(button => button.addEventListener('click', () => setImageGenerateMode(button.dataset.generateMode)));
 $('#imageUpload').addEventListener('change', event => {
   imageFile = event.target.files?.[0] || null;
@@ -744,6 +764,7 @@ async function generateImage() {
   if (!config.apiKey || !config.baseUrl || !config.model) { settingsDialog.showModal(); showToast('\u8bf7\u5148\u8865\u5168\u751f\u56fe\u6a21\u578b\u8bbe\u7f6e'); return; }
   if (imageGenerateMode === 'image' && !imageFile) { showToast('\u56fe\u751f\u56fe\u8bf7\u5148\u4e0a\u4f20\u53c2\u8003\u56fe'); return; }
   const button = $('#generateImageButton'); generatedImageUrl = ''; $('#saveTextToImageButton').disabled = true; button.disabled = true; button.innerHTML = '\u2026 <span>\u751f\u6210\u4e2d</span>';
+  const generationAnimation = startGenerationAnimation($('#imageOutput'), imageGenerateMode === 'image' ? 'image-to-image' : 'text-to-image');
   const endpoint = `${config.baseUrl.replace(/\/$/, '')}/images/${imageGenerateMode === 'image' ? 'edits' : 'generations'}`;
   const imageModel = $('#imageModelCustom').value.trim() || config.model || $('#imageModel').value;
   try {
@@ -760,8 +781,8 @@ async function generateImage() {
     if (!rawImageUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247');
     const inspected = await inspectGeneratedImage(rawImageUrl);
     generatedImageUrl = inspected.url;
-    $('#imageOutput').innerHTML = `<img src="${generatedImageUrl}" alt="生成结果" />`; $('#saveTextToImageButton').disabled = false; $('#saveTextPresetButton').disabled = false; queueWorkspacePersist(); showToast(reportGeneratedImageSize('image', inspected));
-  } catch (error) { $('#imageOutput').innerHTML = `<div class="image-output-placeholder">${error.message}</div>`; showToast(`\u751f\u6210\u5931\u8d25\uff1a${error.message}`); }
+    generationAnimation.complete(); renderOutputImage($('#imageOutput'), generatedImageUrl, '生成结果'); $('#saveTextToImageButton').disabled = false; $('#saveTextPresetButton').disabled = false; queueWorkspacePersist(); showToast(reportGeneratedImageSize('image', inspected));
+  } catch (error) { generationAnimation.fail(); $('#imageOutput').innerHTML = `<div class="image-output-placeholder">${error.message}</div>`; showToast(`\u751f\u6210\u5931\u8d25\uff1a${error.message}`); }
   finally { button.disabled = false; button.innerHTML = imageGenerateMode === 'image' ? '\u2301 <span>\u56fe\u751f\u56fe</span>' : '\u2726 <span>\u6587\u751f\u56fe</span>'; }
 }
 $('#generateImageButton').addEventListener('click', generateImage);
@@ -863,13 +884,14 @@ async function generateDirectI2I() {
   if (!prompt) return showToast('\u8bf7\u8f93\u5165\u56fe\u751f\u56fe\u63d0\u793a\u8bcd');
   if (!config.apiKey || !config.baseUrl || !config.model) { settingsDialog.showModal(); showToast('\u8bf7\u5148\u914d\u7f6e\u751f\u56fe\u6a21\u578b'); return; }
   const button = $('#generateDirectI2IButton'); directI2IResultUrl = ''; $('#saveDirectI2IButton').disabled = true; button.disabled = true; button.innerHTML = '\u2026 <span>\u56fe\u751f\u56fe\u4e2d</span>';
+  const generationAnimation = startGenerationAnimation($('#directI2IOutput'), 'image-to-image');
   try {
     const fullPrompt = `${buildI2IPrompt(prompt, getSelectedOptionText('directI2IStyle'), $('#directI2IPoseStrength').value, $('#directI2IStrength').value, $('#directI2INegative').value)} ${directI2IFiles.length > 1 ? '\u5df2\u6309\u7f16\u53f7\u9644\u52a0\u591a\u5f20\u53c2\u8003\u56fe\u3002\u56fe 1\u3001\u56fe 2 \u7b49\u7684\u7528\u9014\u4ee5\u7528\u6237\u63d0\u793a\u8bcd\u4e2d\u7684\u660e\u786e\u8bf4\u660e\u4e3a\u51c6\uff0c\u4e0d\u8981\u64c5\u81ea\u5047\u5b9a\u4efb\u610f\u56fe\u7247\u662f\u4eba\u7269\u3001\u4e3b\u4f53\u3001\u98ce\u683c\u6216\u6784\u56fe\u53c2\u8003\u3002' : ''}`.trim(); lastGenerationKind = 'image-to-image';
     const form = new FormData(); form.append('model', config.model); form.append('prompt', fullPrompt); appendImageRequestOptions(form, 'directI2I', config.model); directI2IFiles.forEach(file => form.append('image', file, file.name)); appendImageReferenceFidelity(form, config, config.model);
     const response = await apiRequest(`${config.baseUrl.replace(/\/$/, '')}/images/edits`, { method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}` }, body: form });
     if (!response.ok) { const detail = await response.text(); throw new Error(`HTTP ${response.status} ${detail.slice(0, 180)}`); }
-    const image = (await response.json()).data?.[0]; const rawImageUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || ''; if (!rawImageUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247'); const inspected = await inspectGeneratedImage(rawImageUrl); directI2IResultUrl = inspected.url; $('#directI2IOutput').innerHTML = `<img src="${directI2IResultUrl}" alt="图生图结果" />`; $('#saveDirectI2IButton').disabled = false; $('#saveDirectI2IPresetButton').disabled = false; queueWorkspacePersist(); showToast(reportGeneratedImageSize('directI2I', inspected));
-  } catch (error) { $('#directI2IOutput').innerHTML = `<div class="image-output-placeholder">${error.message}</div>`; showToast(`\u56fe\u751f\u56fe\u5931\u8d25：${error.message}`); }
+    const image = (await response.json()).data?.[0]; const rawImageUrl = image?.b64_json ? `data:image/png;base64,${image.b64_json}` : image?.url || ''; if (!rawImageUrl) throw new Error('\u63a5\u53e3\u6ca1\u6709\u8fd4\u56de\u56fe\u7247'); const inspected = await inspectGeneratedImage(rawImageUrl); directI2IResultUrl = inspected.url; generationAnimation.complete(); renderOutputImage($('#directI2IOutput'), directI2IResultUrl, '图生图结果'); $('#saveDirectI2IButton').disabled = false; $('#saveDirectI2IPresetButton').disabled = false; queueWorkspacePersist(); showToast(reportGeneratedImageSize('directI2I', inspected));
+  } catch (error) { generationAnimation.fail(); $('#directI2IOutput').innerHTML = `<div class="image-output-placeholder">${error.message}</div>`; showToast(`\u56fe\u751f\u56fe\u5931\u8d25：${error.message}`); }
   finally { button.disabled = false; button.innerHTML = '\u2301 <span>\u751f\u6210\u56fe\u751f\u56fe</span>'; }
 }
 $('#generateDirectI2IButton').addEventListener('click', generateDirectI2I);
@@ -1104,8 +1126,16 @@ async function saveGeneratedImage(url, kind) {
 $('#saveTextToImageButton').addEventListener('click', () => openFramePicker(generatedImageUrl, 'text-to-image'));
 $('#saveDirectI2IButton').addEventListener('click', () => openFramePicker(directI2IResultUrl, 'image-to-image'));
 function openImagePreview(url) { if (!url) return; $('#fullImagePreview').src = url; $('#imagePreviewDialog').showModal(); }
-$('#imageOutput').addEventListener('click', event => { if (event.target.tagName === 'IMG') openImagePreview(generatedImageUrl); });
-$('#directI2IOutput').addEventListener('click', event => { if (event.target.tagName === 'IMG') openImagePreview(directI2IResultUrl); });
+function getPreviewSource(image) { return image?.dataset.previewSrc || image?.currentSrc || image?.src || ''; }
+function renderOutputImage(container, source, alt) {
+  const image = document.createElement('img');
+  image.src = source;
+  image.dataset.previewSrc = source;
+  image.alt = alt;
+  container.replaceChildren(image);
+}
+$('#imageOutput').addEventListener('click', event => { const image = event.target.closest('img'); if (image) openImagePreview(getPreviewSource(image)); });
+$('#directI2IOutput').addEventListener('click', event => { const image = event.target.closest('img'); if (image) openImagePreview(getPreviewSource(image)); });
 $('#closeImagePreview').addEventListener('click', () => $('#imagePreviewDialog').close());
 const WORKSPACE_DB_NAME = 'prompt-pop-workspace';
 const WORKSPACE_STATE_KEY = 'latest-workspace';
@@ -1207,6 +1237,7 @@ function renderImagePresets() {
     const image = document.createElement('img');
     image.className = 'saved-preset-preview';
     image.src = preset.referenceImage;
+    image.dataset.previewSrc = preset.referenceImage;
     image.alt = '预设参考图';
     image.loading = 'lazy';
     const content = document.createElement('div');
@@ -1357,6 +1388,11 @@ $('#cancelPresetSaveButton').addEventListener('click', closePresetSaveDialog);
 $('#closePresetSaveDialog').addEventListener('click', closePresetSaveDialog);
 $('#presetSaveDialog').addEventListener('close', () => { pendingPresetSource = ''; });
 $('#savedImagePresets').addEventListener('click', async event => {
+  const image = event.target.closest('img');
+  if (image) {
+    openImagePreview(getPreviewSource(image));
+    return;
+  }
   const button = event.target.closest('[data-preset-action]');
   if (!button) return;
   const preset = findImagePreset(button.dataset.presetId);
@@ -1390,9 +1426,8 @@ function collectWorkspaceState() {
 }
 function saveWorkspaceFallback(state) {
   try {
-    // Large data URLs are kept in IndexedDB; Android has a durable gallery copy for recovery.
-    const fallback = { ...state, generatedImageUrl: state.generatedImageUrl.startsWith('data:') ? '' : state.generatedImageUrl, directI2IResultUrl: state.directI2IResultUrl.startsWith('data:') ? '' : state.directI2IResultUrl };
-    localStorage.setItem(WORKSPACE_LOCAL_KEY, JSON.stringify(fallback));
+    // Keep the complete image source so a backgrounded WebView can restore the actual image.
+    localStorage.setItem(WORKSPACE_LOCAL_KEY, JSON.stringify(state));
   } catch { /* Storage quota must not interrupt editing. */ }
 }
 function queueWorkspacePersist() { clearTimeout(workspacePersistTimer); workspacePersistTimer = setTimeout(() => { persistWorkspaceState(); }, 180); }
@@ -1406,9 +1441,9 @@ async function persistWorkspaceState() {
 function renderRecoveredImage(kind, source) {
   if (!source) return;
   if (kind === 'image-to-image') {
-    directI2IResultUrl = source; $('#directI2IOutput').innerHTML = `<img src="${source}" alt="image-to-image result" />`; $('#saveDirectI2IButton').disabled = false; $('#saveDirectI2IPresetButton').disabled = false;
+    directI2IResultUrl = source; renderOutputImage($('#directI2IOutput'), source, '图生图结果'); $('#saveDirectI2IButton').disabled = false; $('#saveDirectI2IPresetButton').disabled = false;
   } else {
-    generatedImageUrl = source; $('#imageOutput').innerHTML = `<img src="${source}" alt="generated result" />`; $('#saveTextToImageButton').disabled = false; $('#saveTextPresetButton').disabled = false;
+    generatedImageUrl = source; renderOutputImage($('#imageOutput'), source, '生成结果'); $('#saveTextToImageButton').disabled = false; $('#saveTextPresetButton').disabled = false;
   }
 }
 function requestLastGeneratedImage() {
