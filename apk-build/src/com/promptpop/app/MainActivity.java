@@ -62,6 +62,11 @@ public class MainActivity extends Activity {
                     webView.loadUrl("file:///android_asset/index.html");
                 }
             }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                notifyWebViewGenerationRecovery();
+            }
         });
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -111,6 +116,19 @@ public class MainActivity extends Activity {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_PERMISSION_REQUEST);
         }
         loadAppContent();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        notifyWebViewGenerationRecovery();
+    }
+
+    private void notifyWebViewGenerationRecovery() {
+        if (webView == null) return;
+        webView.postDelayed(() -> webView.evaluateJavascript(
+            "window.__nativeGenerationAvailable && window.__nativeGenerationAvailable();", null
+        ), 350);
     }
 
     private class ApiBridge {

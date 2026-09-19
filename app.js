@@ -36,7 +36,7 @@ const imageServiceModelInput = $('#imageServiceModel');
 const modelPickerSheet = $('#modelPickerSheet');
 const modelPickerList = $('#modelPickerList');
 const modelPickerTitle = $('#modelPickerTitle');
-const APP_VERSION = '1.2.46';
+const APP_VERSION = '1.2.47';
 const UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/TTflysky/prompt-Pop/main/update.json';
 const updateRequests = new Map();
 let availableUpdate;
@@ -1453,6 +1453,38 @@ function requestLastGeneratedImage() {
     nativeLastImageRequests.set(id, { resolve, reject }); window.PromptPopNative.getLastGeneratedImage(id);
   });
 }
+let nativeRecoveryTimer = 0;
+let nativeRecoveryAttempts = 0;
+let lastRecoveredNativeSource = '';
+async function recoverNativeGeneratedImage() {
+  try {
+    const nativeImage = await requestLastGeneratedImage();
+    if (nativeImage?.source && nativeImage.source !== lastRecoveredNativeSource && nativeImage.source !== generatedImageUrl && nativeImage.source !== directI2IResultUrl) {
+      lastRecoveredNativeSource = nativeImage.source;
+      lastGenerationKind = nativeImage.kind || lastGenerationKind || 'text-to-image';
+      renderRecoveredImage(lastGenerationKind, nativeImage.source);
+      queueWorkspacePersist();
+      showToast('后台生成完成，图片已恢复');
+      nativeRecoveryAttempts = 0;
+      return true;
+    }
+  } catch { /* A temporary WebView/native handoff failure should be retried. */ }
+  return false;
+}
+window.__nativeGenerationAvailable = () => {
+  window.clearTimeout(nativeRecoveryTimer);
+  nativeRecoveryAttempts = 0;
+  const poll = async () => {
+    const recovered = await recoverNativeGeneratedImage();
+    if (!recovered && nativeRecoveryAttempts < 30) {
+      nativeRecoveryAttempts += 1;
+      nativeRecoveryTimer = window.setTimeout(poll, 2000);
+    } else if (recovered) {
+      nativeRecoveryAttempts = 0;
+    }
+  };
+  poll();
+};
 async function restoreWorkspaceState() {
   let state = null;
   try { const db = await openWorkspaceDb(); state = await workspaceRead(db, WORKSPACE_STATE_KEY); db.close(); } catch { /* Fall back below. */ }
@@ -1469,7 +1501,7 @@ async function restoreWorkspaceState() {
   }
   try {
     const nativeImage = await requestLastGeneratedImage();
-    if (nativeImage?.source) { lastGenerationKind = nativeImage.kind || lastGenerationKind || 'text-to-image'; renderRecoveredImage(lastGenerationKind, nativeImage.source); queueWorkspacePersist(); }
+    if (nativeImage?.source) { lastRecoveredNativeSource = nativeImage.source; lastGenerationKind = nativeImage.kind || lastGenerationKind || 'text-to-image'; renderRecoveredImage(lastGenerationKind, nativeImage.source); queueWorkspacePersist(); }
   } catch { /* A deleted gallery image should not block the page. */ }
   refreshPresetControlLabels();
   updateCount();
@@ -1477,7 +1509,7 @@ async function restoreWorkspaceState() {
 document.addEventListener('input', event => { if (!event.target.closest('#settingsDialog')) queueWorkspacePersist(); });
 document.addEventListener('change', event => { if (!event.target.closest('#settingsDialog')) queueWorkspacePersist(); });
 window.addEventListener('pagehide', () => { saveWorkspaceFallback(collectWorkspaceState()); persistWorkspaceState(); });
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { saveWorkspaceFallback(collectWorkspaceState()); persistWorkspaceState(); } });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { saveWorkspaceFallback(collectWorkspaceState()); persistWorkspaceState(); } else { window.__nativeGenerationAvailable?.(); } });
 Promise.all([restoreWorkspaceState(), loadImagePresets()]).finally(() => { syncImagePromptControlState(); updateOutputSizeSummary('image'); });
 
 async function optimize() {
